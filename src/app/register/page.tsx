@@ -131,7 +131,7 @@ export default function RegisterPage() {
                     <Input type="password" placeholder="••••••••" {...field} />
                   </FormControl>
                   <FormMessage />
-                </Iteem>
+                </FormItem>
               )}
             />
             <Button type="submit" className="w-full" disabled={isLoading}>
