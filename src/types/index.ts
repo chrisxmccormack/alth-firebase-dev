@@ -29,3 +29,28 @@ export interface Company {
   ownerUid: string;
   ownerEmail: string;
 }
+
+export interface Contact {
+  id: string;
+  companyAId: string;
+  companyBId: string | null;
+  relationship: {
+    buyer: boolean;
+    seller: boolean;
+  };
+  status: "Pending" | "Connected";
+  inviteToken?: string;
+  expiresAt?: Timestamp;
+  createdAt: Timestamp;
+}
+
+export interface PopulatedContact {
+  id: string;
+  status: "Pending" | "Connected";
+  relationship: {
+    buyer: boolean;
+    seller: boolean;
+  };
+  partnerCompany: Company;
+  createdAt: Timestamp;
+}

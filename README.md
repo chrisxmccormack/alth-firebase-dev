@@ -1,6 +1,6 @@
 # AlethiumCoreAuth
 
-This is a Next.js application for user authentication using Firebase, with support for company accounts and an admin approval workflow.
+This is a Next.js application for user authentication using Firebase, with support for company accounts and an admin approval workflow. It also includes a contact management system with a secure invite-link feature.
 
 ## Getting Started
 
@@ -33,13 +33,28 @@ This project uses Firebase for authentication and database services. You need to
     - Go to the **Authentication -> Users** tab in your Firebase project.
     - Copy the UID of the user you want to be the admin.
     - Paste it into the `NEXT_PUBLIC_SYSTEM_ADMIN_UID` variable in your `.env.local` file.
+7.  **Set the App's Base URL**: For invite links to work correctly, you must set the public URL of your application.
+    - For local development, this is typically `http://localhost:9002`.
+    - For a deployed application, use its public domain (e.g., `https://your-app.com`).
+    - Set this value for `NEXT_PUBLIC_BASE_URL` in your `.env.local` file.
 
 ⚠️ **Important**: If you see a message like "Firebase: Error (auth/invalid-api-key)", it means your environment variables are missing or incorrect. Please ensure your `.env.local` file is correctly configured.
 
 ### Authorized Domains
 
-For social sign-in providers (like Google and Microsoft) to work correctly in a development or preview environment, you must add your app's domain to the list of authorized domains in Firebase.
+For social sign-in providers (like Google and Microsoft) and the invite-link flow to work correctly in a development or preview environment, you must add your app's domain to the list of authorized domains in Firebase.
 
 1.  Go to the **Authentication -> Settings** tab in your Firebase project.
 2.  Under "Authorized domains", click "Add domain".
 3.  Add the domain of your development or preview environment (e.g., `localhost` for local development, or your preview URL from your hosting provider).
+
+## Testing the Invite Flow
+
+1.  **User A**: Sign up and create a company. Navigate to **/contacts**.
+2.  Click "Invite Contact", select a relationship, and generate an invite link.
+3.  Copy the generated link and then sign out.
+4.  **User B**: Sign up with a different account and create a second company.
+5.  Open the invite link from User A in your browser.
+6.  You should see an invitation prompt. Click "Accept Invitation".
+7.  You will be redirected to your **/contacts** page and should now see User A's company listed.
+8.  Sign out and sign back in as **User A**. Navigate to **/contacts**. You should now see User B's company in your list as well.
