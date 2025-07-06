@@ -61,10 +61,15 @@ export default function RegisterPage() {
       
       router.push("/dashboard");
     } catch (error: any) {
+      let description = error.message;
+      if (error.code === "auth/operation-not-allowed") {
+        description =
+          "Email/Password sign-up is not enabled. Please enable it in your Firebase console.";
+      }
       toast({
         variant: "destructive",
         title: "Registration Failed",
-        description: error.message,
+        description,
       });
     } finally {
       setIsLoading(false);

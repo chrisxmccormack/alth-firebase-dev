@@ -42,10 +42,15 @@ export default function LoginPage() {
       await signInWithEmailAndPassword(auth!, data.email, data.password);
       router.push("/dashboard");
     } catch (error: any) {
+      let description = error.message;
+      if (error.code === "auth/operation-not-allowed") {
+        description =
+          "Email/Password sign-in is not enabled. Please enable it in your Firebase console.";
+      }
       toast({
         variant: "destructive",
         title: "Login Failed",
-        description: error.message,
+        description,
       });
     } finally {
       setIsLoading(false);
@@ -59,10 +64,16 @@ export default function LoginPage() {
       await signInWithPopup(auth!, authProvider!);
       router.push("/dashboard");
     } catch (error: any) {
+       let description = error.message;
+       if (error.code === "auth/operation-not-allowed") {
+        description = `Sign-in with ${
+          provider.charAt(0).toUpperCase() + provider.slice(1)
+        } is not enabled. Please enable it in your Firebase console.`;
+       }
        toast({
         variant: "destructive",
         title: "Sign-in Failed",
-        description: error.message,
+        description,
       });
     } finally {
       setIsSocialLoading(null);
