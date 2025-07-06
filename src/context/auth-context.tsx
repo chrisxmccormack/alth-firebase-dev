@@ -2,21 +2,26 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, isFirebaseInitialized } from '@/lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, firestore, isFirebaseInitialized } from '@/lib/firebase';
 import { Loader2 } from 'lucide-react';
+import type { UserData } from '@/types';
 
 interface AuthContextType {
   user: User | null;
+  userData: UserData | null;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  userData: null,
   loading: true,
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,13 +29,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       return;
     }
-    // `auth` is guaranteed to be non-null if `isFirebaseInitialized` is true.
-    const unsubscribe = onAuthStateChanged(auth!, (user) => {
+    
+    const unsubscribeAuth = onAuthStateChanged(auth!, (user) => {
       setUser(user);
-      setLoading(false);
+      if (user) {
+        const userDocRef = doc(firestore!, 'users', user.uid);
+        const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
+          if (doc.exists()) {
+            setUserData(doc.data() as UserData);
+          } else {
+            setUserData(null);
+          }
+          setLoading(false);
+        }, () => {
+          setUserData(null);
+          setLoading(false);
+        });
+        return () => unsubscribeUser();
+      } else {
+        setUserData(null);
+        setLoading(false);
+      }
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
 
   if (!isFirebaseInitialized) {
@@ -53,17 +75,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
   }
 
-  const value = { user, loading };
+  const value = { user, userData, loading };
 
   return (
     <AuthContext.Provider value={value}>
-      {loading ? (
-        <div className="flex h-screen w-full items-center justify-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        </div>
-      ) : (
-        children
-      )}
+      {children}
     </AuthContext.Provider>
   );
 };

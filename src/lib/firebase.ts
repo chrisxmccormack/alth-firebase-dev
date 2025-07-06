@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, OAuthProvider, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,6 +18,7 @@ let isFirebaseInitialized = !!(firebaseConfig.apiKey && firebaseConfig.projectId
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let firestore: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
 let microsoftProvider: OAuthProvider | null = null;
 
@@ -25,6 +27,7 @@ if (isFirebaseInitialized) {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
     firestore = getFirestore(app);
+    storage = getStorage(app);
     googleProvider = new GoogleAuthProvider();
     microsoftProvider = new OAuthProvider('microsoft.com');
   } catch(e) {
@@ -33,4 +36,4 @@ if (isFirebaseInitialized) {
   }
 }
 
-export { app, auth, firestore, googleProvider, microsoftProvider, isFirebaseInitialized };
+export { app, auth, firestore, storage, googleProvider, microsoftProvider, isFirebaseInitialized };

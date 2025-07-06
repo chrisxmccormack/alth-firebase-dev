@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/firebase";
@@ -16,6 +17,8 @@ export default function DashboardPage() {
     router.push("/login");
   };
 
+  const isAdmin = user?.uid === process.env.NEXT_PUBLIC_SYSTEM_ADMIN_UID;
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between p-4 border-b">
@@ -25,7 +28,14 @@ export default function DashboardPage() {
               AlethiumCore
             </h1>
          </div>
-        <Button onClick={handleSignOut} variant="outline">Sign Out</Button>
+         <div className="flex items-center gap-2">
+            {isAdmin && (
+                <Button asChild variant="ghost">
+                    <Link href="/admin">Admin Panel</Link>
+                </Button>
+            )}
+            <Button onClick={handleSignOut} variant="outline">Sign Out</Button>
+         </div>
       </header>
       <main className="flex flex-1 items-center justify-center">
         <div className="text-center">
@@ -33,6 +43,7 @@ export default function DashboardPage() {
           <p className="mt-2 text-lg text-muted-foreground">
             Hi {user?.displayName || user?.email}! You’re logged in.
           </p>
+          <p className="mt-1 text-base text-muted-foreground">Your company is approved and you're all set.</p>
         </div>
       </main>
     </div>
