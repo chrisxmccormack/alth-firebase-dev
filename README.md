@@ -40,6 +40,29 @@ This project uses Firebase for authentication and database services. You need to
 
 ⚠️ **Important**: If you see a message like "Firebase: Error (auth/invalid-api-key)", it means your environment variables are missing or incorrect. Please ensure your `.env.local` file is correctly configured.
 
+## Firebase Security Rules
+
+This project includes Firestore security rules in the `firestore.rules` file. These rules are essential for protecting your data.
+
+**Before running the app**, you must deploy these rules and configure the System Admin UID within them.
+
+1.  **Install Firebase CLI**: If you don't have it, install the Firebase command-line tools:
+    ```bash
+    npm install -g firebase-tools
+    ```
+2.  **Login to Firebase**:
+    ```bash
+    firebase login
+    ```
+3.  **Configure Admin UID in Rules**:
+    - Open the `firestore.rules` file.
+    - Find the line with the placeholder `'YOUR_ADMIN_UID_HERE'`.
+    - Replace the placeholder with the same System Admin UID you set in your `.env.local` file.
+4.  **Deploy Rules**: From your project root, run:
+    ```bash
+    firebase deploy --only firestore:rules
+    ```
+
 ### Authorized Domains
 
 For social sign-in providers (like Google and Microsoft) and the invite-link flow to work correctly in a development or preview environment, you must add your app's domain to the list of authorized domains in Firebase.
