@@ -1,95 +1,80 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // =============================================
-    // Helper Functions
-    // =============================================
+
+    // --- Helper Functions ---
     function isSignedIn() {
       return request.auth != null;
     }
-    
+
+    function isRequestingOwnData(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
     function getUserData() {
+      // Fetches the data for the currently authenticated user.
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-
-    function isSystemAdmin() {
-      // IMPORTANT: Replace with the actual System Admin UID
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
-    }
-
-    // Is the currently authenticated user associated with an approved company?
-    function isApprovedUser() {
+    
+    function isUserApproved() {
+      // An approved user is one who is signed in, has a companyId, and that company is approved.
       let userData = getUserData();
-      // Check that the user has a companyId linked to their user document
-      if (!('companyId' in userData) || userData.companyId == null) {
-        return false;
-      }
-      let company = get(/databases/$(database)/documents/companies/$(userData.companyId)).data;
-      return company.status == 'Approved';
+      return isSignedIn() &&
+             userData.companyId != null &&
+             get(/databases/$(database)/documents/companies/$(userData.companyId)).data.status == 'Approved';
     }
 
-    // =============================================
-    // Users Collection
-    // =============================================
+    function isAdmin() {
+      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with your actual System Admin UID.
+      return isSignedIn() && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    }
+
+    // --- Collection Rules ---
+
     match /users/{userId} {
-      // Users can create their own user document on signup
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow read: if isRequestingOwnData(userId) || isAdmin();
+      
+      // Allow user creation if the UID in the path matches the auth token.
+      allow create: if isRequestingOwnData(userId);
 
-      // Users can only read or update their own user document
-      allow read, update: if isSignedIn() && request.auth.uid == userId;
+      // Allow user to update their own profile, or an admin to update any profile.
+      allow update: if isRequestingOwnData(userId) || isAdmin();
     }
 
-    // =============================================
-    // Companies Collection
-    // =============================================
     match /companies/{companyId} {
-      // Anyone can read company data, this is needed for various parts of the app to function.
-      allow read: if isSignedIn();
+      // Any approved user or an admin can read company profiles.
+      allow read: if isUserApproved() || isAdmin();
 
-      // Creating a company:
-      // 1. New user signup: ownerUid must match their own UID.
-      // 2. Manually adding a contact: ownerUid is null, and the creator must be an approved user.
-      allow create: if isSignedIn() &&
-                      ( (request.resource.data.ownerUid == request.auth.uid) ||
-                        (request.resource.data.ownerUid == null && isApprovedUser())
-                      );
+      // Any signed-in user can create a company (for themselves or a contact).
+      // The business logic is handled in the server action.
+      allow create: if isSignedIn();
 
-      // Updating a company:
-      // Only the system admin can approve companies.
-      allow update: if isSystemAdmin();
+      // Only an admin can update a company (e.g., to approve it).
+      allow update: if isAdmin();
     }
-
-    // =============================================
-    // Contacts Collection
-    // =============================================
+    
     match /contacts/{contactId} {
-      // Allow reading contacts if the user's companyId is in the 'members' array.
-      allow read: if isSignedIn() && isApprovedUser() && getUserData().companyId in resource.data.members;
+      // You can read a contact if your company is one of the members.
+      allow read: if isUserApproved() && getUserData().companyId in resource.data.members;
 
-      // Creating a contact:
-      // This is the key fix. We can't check if companyB exists because it's part of the same batch.
-      // We trust the client to provide the correct data, but we verify the user's identity.
-      // The user creating the contact must be an approved user.
-      // Their companyId must be in the 'members' array of the new contact.
-      allow create: if isSignedIn() && isApprovedUser() && 
-                      getUserData().companyId == request.resource.data.companyAId &&
-                      getUserData().companyId in request.resource.data.members;
-
-      // Updating a contact:
-      // This happens when accepting an invite. Both parties must be approved users.
-      // A user can update a contact if they are a member of it.
-      allow update: if isSignedIn() && isApprovedUser() && getUserData().companyId in resource.data.members;
+      // Create a contact (for an invite link or direct creation).
+      // The user must be approved and creating a contact linked to their own company.
+      allow create: if isUserApproved() &&
+                       getUserData().companyId == request.resource.data.companyAId;
+                       
+      // Update a contact (typically for accepting an invite).
+      allow update: if isUserApproved() &&
+                       // When accepting, you must be adding your company as companyBId.
+                       getUserData().companyId == request.resource.data.companyBId &&
+                       // And your company ID must now be in the members list.
+                       getUserData().companyId in request.resource.data.members;
     }
-
-    // =============================================
-    // Orders Collection
-    // =============================================
+    
     match /orders/{orderId} {
-        // Can read/write an order if your companyId is in the members array
-        allow read, create, update: if isSignedIn() && isApprovedUser() && getUserData().companyId in resource.data.members;
+      // You can read or write an order if your company is one of the members.
+      allow read, write: if isUserApproved() &&
+                           getUserData().companyId in resource.data.members;
     }
   }
 }
