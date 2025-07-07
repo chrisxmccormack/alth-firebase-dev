@@ -1,85 +1,84 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ===== HELPER FUNCTIONS =====
+    
+    // --- Helper Functions ---
     function isSignedIn() {
       return request.auth != null;
     }
+    
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
 
-    function isSystemAdmin() {
-      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with your actual System Admin UID.
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    function isAdmin() {
+      // IMPORTANT: Replace with your actual Admin UID string
+      return isUser('YOUR_ADMIN_UID_HERE');
     }
 
     function getUserData(userId) {
       return get(/databases/$(database)/documents/users/$(userId)).data;
     }
-    
+
     function getCompanyData(companyId) {
       return get(/databases/$(database)/documents/companies/$(companyId)).data;
     }
 
-    function isCompanyApproved(companyId) {
-        return getCompanyData(companyId).status == 'Approved';
-    }
-    
-    function isUserApproved() {
-      let userData = getUserData(request.auth.uid);
-      return userData.companyId != null && isCompanyApproved(userData.companyId);
-    }
-    
-    function userOwnsCompany(companyId) {
-      return getCompanyData(companyId).ownerUid == request.auth.uid;
+    function isApprovedUser(userId) {
+      let userData = getUserData(userId);
+      return isSignedIn() &&
+             userData.companyId != null &&
+             getCompanyData(userData.companyId).status == 'Approved';
     }
 
-    // ===== USERS =====
+    function isCompanyOwner(companyId, userId) {
+      return getCompanyData(companyId).ownerUid == userId;
+    }
+
+    function isMemberOfContact(contactData) {
+      let userCompanyId = getUserData(request.auth.uid).companyId;
+      return userCompanyId in contactData.members;
+    }
+
+    function isMemberOfOrder(orderData) {
+      let userCompanyId = getUserData(request.auth.uid).companyId;
+      return userCompanyId in orderData.members;
+    }
+
+    // --- Collection Rules ---
+
     match /users/{userId} {
-      allow read, write: isSignedIn() && request.auth.uid == userId;
+      allow read, update, delete: if isUser(userId);
+      allow create: if isSignedIn();
     }
 
-    // ===== COMPANIES =====
     match /companies/{companyId} {
-      allow read: isSignedIn();
-      
-      allow update: isSystemAdmin() || (userOwnsCompany(companyId) && isCompanyApproved(companyId));
-      
-      allow create: isSystemAdmin() || 
-                    (isSignedIn() && request.resource.data.ownerUid == request.auth.uid) ||
-                    (isUserApproved() && !('ownerUid' in request.resource.data));
+      allow read: if isApprovedUser(request.auth.uid);
+      allow create: if (
+                      // Case 1: A new user is setting up their own company
+                      (isSignedIn() && request.resource.data.ownerUid == request.auth.uid) ||
+                      // Case 2: An approved user is manually creating a contact company (which has no owner).
+                      // This is part of the batch write that also creates the contact document.
+                      (isApprovedUser(request.auth.uid) && request.resource.data.ownerUid == null)
+                    );
+      allow update: if isAdmin() || isCompanyOwner(companyId, request.auth.uid);
     }
 
-    // ===== CONTACTS =====
     match /contacts/{contactId} {
-        allow read: isSignedIn() && getUserData(request.auth.uid).companyId in resource.data.members;
-
-        // Logic for creating an invite link OR a direct connection (batch write)
-        allow create: (isSignedIn() && isUserApproved() &&
-                      request.resource.data.companyAId == getUserData(request.auth.uid).companyId &&
-                      request.resource.data.status == 'Pending') 
-                      ||
-                      (isUserApproved() && 
-                      request.resource.data.status == 'Connected' &&
-                      getUserData(request.auth.uid).companyId in request.resource.data.members);
-
-        // Logic for accepting an invite
-        allow update: isSignedIn() && isUserApproved() &&
-                      resource.data.status == 'Pending' &&
-                      request.resource.data.status == 'Connected' &&
-                      request.resource.data.companyBId == getUserData(request.auth.uid).companyId &&
-                      !('inviteToken' in request.resource.data);
+      allow read: if isApprovedUser(request.auth.uid) && isMemberOfContact(resource.data);
+      allow create: if isApprovedUser(request.auth.uid) && 
+                       request.resource.data.companyAId == getUserData(request.auth.uid).companyId;
+      allow update: if isApprovedUser(request.auth.uid) && 
+                       (isMemberOfContact(resource.data) || // An existing member can update the contact
+                       request.resource.data.companyBId == getUserData(request.auth.uid).companyId); // A new member can accept an invite
     }
 
-    // ===== ORDERS =====
     match /orders/{orderId} {
-        allow read: isSignedIn() && getUserData(request.auth.uid).companyId in resource.data.members;
-        
-        allow create: isSignedIn() && isUserApproved() &&
-                      request.resource.data.sellerCompanyId == getUserData(request.auth.uid).companyId;
-        
-        allow update: isSignedIn() && isUserApproved() &&
-                      getUserData(request.auth.uid).companyId in resource.data.members;
+        allow read, update: if isApprovedUser(request.auth.uid) && isMemberOfOrder(resource.data);
+        allow create: if isApprovedUser(request.auth.uid) && 
+                         request.resource.data.sellerCompanyId == getUserData(request.auth.uid).companyId;
     }
   }
 }
