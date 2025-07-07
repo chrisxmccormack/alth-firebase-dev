@@ -1,100 +1,68 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // =================
-    // Helper Functions
-    // =================
+    
+    // --- Global Helper Functions ---
 
     function isSignedIn() {
       return request.auth != null;
     }
-
-    function isAdmin() {
-      // IMPORTANT: Replace with your actual Admin UID string.
+    
+    function isSystemAdmin() {
+      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' below with the actual UID of the system administrator.
+      // Do NOT remove the single quotes around the UID string.
       return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
-
-    function currentUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
     
-    function getCompany(companyId) {
-      return get(/databases/$(database)/documents/companies/$(companyId));
+    function isCompanyOwner(companyId) {
+      return isSignedIn() && get(/databases/$(database)/documents/companies/$(companyId)).data.ownerUid == request.auth.uid;
     }
 
     function isApprovedUser() {
-      let companyId = currentUserData().companyId;
-      return companyId != null && getCompany(companyId).data.status == 'Approved';
+      let userCompanyId = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId;
+      return userCompanyId != null && get(/databases/$(database)/documents/companies/$(userCompanyId)).data.status == 'Approved';
+    }
+    
+    function isContactMember(contactId) {
+       return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in get(/databases/$(database)/documents/contacts/$(contactId)).data.members;
     }
 
-    // =================
-    // Collections
-    // =================
+    function isOrderMember(orderId) {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in get(/databases/$(database)/documents/orders/$(orderId)).data.members;
+    }
+    
+    // --- Collection Rules ---
 
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow write: if isAdmin() || (
-        isSignedIn() && request.auth.uid == userId && (
-          // Allow create on signup
-          !exists(/databases/$(database)/documents/users/$(userId)) ||
-          // Allow update only to set companyId once during setup
-          (resource.data.companyId == null && request.resource.data.companyId != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyId']))
-        )
-      );
+      allow read, write: if (isSignedIn() && request.auth.uid == userId) || isSystemAdmin();
     }
-
+    
     match /companies/{companyId} {
-      // Any signed-in user can read company data.
-      // Security is primarily enforced by Firestore queries on the client-side.
-      allow read: if isSignedIn();
-
-      // Create a company:
-      // 1. A new user registers their own company.
-      // 2. An approved user creates a company for a direct contact.
-      allow create: if isSignedIn() && (
-        (request.resource.data.ownerUid == request.auth.uid && request.resource.data.status == 'Pending') ||
-        (isApprovedUser() && request.resource.data.ownerUid == null && request.resource.data.status == 'Approved')
-      );
+      allow read: if isSignedIn() || isSystemAdmin();
+      allow write: if isSystemAdmin();
       
-      // Only the admin can approve a company.
-      allow update: if isSignedIn() && isAdmin() &&
-                      request.resource.data.status == 'Approved' &&
-                      resource.data.status == 'Pending';
+      // A signed-in user can create a company for themselves.
+      // An approved user can create a new company for a direct contact.
+      allow create: if (isSignedIn() && request.resource.data.ownerUid == request.auth.uid) || 
+                       (isApprovedUser() && request.resource.data.ownerUid == null);
       
-      allow delete: if false;
+      // Only the company owner can update their own company details.
+      allow update: if isCompanyOwner(companyId);
     }
 
     match /contacts/{contactId} {
-      // Allow read if the user's company is a member of the contact.
-      allow read: if isSignedIn() && resource.data.members.hasAny([currentUserData().companyId]);
-      
-      // Create a contact (either pending invite or direct creation)
-      allow create: if isSignedIn() && isApprovedUser() && request.resource.data.companyAId == currentUserData().companyId && (
-        // Case 1: Creating a pending invite link
-        request.resource.data.status == 'Pending' ||
-        // Case 2: Creating a direct, connected contact (part of a batch write)
-        (request.resource.data.status == 'Connected' &&
-         // Verify the company being created in the same batch is valid (has no owner)
-         getAfter(/databases/$(database)/documents/companies/$(request.resource.data.companyBId)).data.ownerUid == null
-        )
-      );
-      
-      // Update a contact (only to accept an invite)
-      allow update: if isSignedIn() && isApprovedUser() &&
-                      resource.data.status == 'Pending' &&
-                      request.resource.data.status == 'Connected' &&
-                      request.resource.data.companyBId == currentUserData().companyId &&
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyBId', 'status', 'members', 'inviteToken', 'expiresAt']);
-
-      allow delete: if false;
+        allow read, write: if isSystemAdmin();
+        allow read: if isContactMember(contactId);
+        allow create: if isApprovedUser();
+        allow update: if isContactMember(contactId);
     }
     
     match /orders/{orderId} {
-      allow read, update: if isSignedIn() && isApprovedUser() && resource.data.members.hasAny([currentUserData().companyId]);
-      allow create: if isSignedIn() && isApprovedUser() && request.resource.data.sellerCompanyId == currentUserData().companyId;
-      allow delete: if false;
+        allow read, write: if isSystemAdmin();
+        allow read, update: if isOrderMember(orderId);
+        allow create: if isApprovedUser();
     }
   }
 }
