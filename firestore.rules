@@ -1,114 +1,119 @@
 
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    function isSystemAdmin() {
-      // IMPORTANT: Replace this placeholder with your actual System Admin UID.
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
-    }
 
-    function isSignedIn() {
+    // --- Helper Functions ---
+    function isUserAuthenticated() {
       return request.auth != null;
     }
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
     
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function getUserData(uid) {
+      // It's crucial to check for existence before accessing data
+      return get(/databases/$(database)/documents/users/$(uid));
     }
 
-    function getCompanyId() {
-        return getUserData().companyId;
+    function isSystemAdmin() {
+      // IMPORTANT: Replace this placeholder with your actual System Admin UID
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
     
+    function userCompanyId() {
+      // Check for existence before accessing .data
+      let userData = getUserData(request.auth.uid);
+      return userData.exists ? userData.data.companyId : null;
+    }
+
+    // --- User and Company Rules ---
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isSystemAdmin();
+      allow read, write: if isUserAuthenticated() && (request.auth.uid == userId || isSystemAdmin());
+      allow create: if isUserAuthenticated();
     }
 
     match /companies/{companyId} {
-      allow read: if isSignedIn();
-      allow create: if request.resource.data.ownerUid == request.auth.uid;
-      allow update: if isSystemAdmin() ||
-                     (get(/databases/$(database)/documents/companies/$(companyId)).data.ownerUid == request.auth.uid);
+      allow read: if isUserAuthenticated();
+      allow create: if isUserAuthenticated();
+      allow update: if isUserAuthenticated() && (userCompanyId() == companyId || isSystemAdmin());
+    }
+
+    // --- Contact Rules ---
+    match /contacts/{contactId} {
+      allow read: if isUserAuthenticated() && 
+                   (resource.data.companyAId == userCompanyId() || 
+                    resource.data.companyBId == userCompanyId() ||
+                    isSystemAdmin());
+      allow create: if isUserAuthenticated() && request.resource.data.companyAId == userCompanyId();
+      allow update: if isUserAuthenticated() && 
+                     (resource.data.companyAId == userCompanyId() || 
+                      resource.data.companyBId == userCompanyId() ||
+                      isSystemAdmin());
+    }
+
+    // --- Order Rules ---
+    match /orders/{orderId} {
+      allow read: if isUserAuthenticated() && 
+                   (resource.data.sellerCompanyId == userCompanyId() ||
+                    resource.data.buyerCompanyId == userCompanyId() ||
+                    isSystemAdmin());
+
+      allow create: if isUserAuthenticated() &&
+                     request.resource.data.sellerCompanyId == userCompanyId();
+      
+      allow update: if isUserAuthenticated() &&
+                     ((resource.data.sellerCompanyId == userCompanyId() && isSellerUpdate(resource.data, request.resource.data)) ||
+                      (resource.data.buyerCompanyId == userCompanyId() && isBuyerUpdate(resource.data, request.resource.data)) ||
+                      isSystemAdmin());
     }
     
-    match /contacts/{contactId} {
-       allow read: if isSignedIn() && (
-                    resource.data.companyAId == getCompanyId() ||
-                    resource.data.companyBId == getCompanyId()
-                  );
-       allow create: if request.resource.data.companyAId == getCompanyId();
-       allow update: if (
-                        (resource.data.companyAId == getCompanyId() || resource.data.companyBId == getCompanyId()) ||
-                        (request.resource.data.companyBId == getCompanyId() && resource.data.companyBId == null)
-                     );
+    // --- Order Update Logic ---
+    function isSellerUpdate(existingOrder, newOrder) {
+      // Sellers can mark as paid or dispatched, or cancel early on.
+      let validTransitions = {
+        "Agreed": ["Paid", "Cancelled"],
+        "Paid": ["Dispatched"]
+      };
+      
+      // Also allow cancelling a draft order.
+      if (existingOrder.status == "Draft" && newOrder.status == "Cancelled") {
+        return true;
+      }
+      
+      let nextStatuses = validTransitions[existingOrder.status];
+      // Only allow status field to be changed to a valid next state
+      return nextStatuses != null && newOrder.status in nextStatuses && onlyStatusChanges(existingOrder, newOrder);
     }
 
-    // --- ORDERS ---
-    function isSeller(order)  {
-      return getCompanyId() == order.sellerCompanyId;
-    }
-    function isBuyer(order)   {
-      return getCompanyId() == order.buyerCompanyId;
-    }
-
-    // Check that only fields the user is allowed to change are being changed.
-    function sellerUpdatableFields() {
-      return [
-        'status', 'trackingId', 'lines', 'totals', 
-        'paymentMethod', 'currency', 'updatedAt'
-      ];
-    }
-    function buyerUpdatableFields() {
-      return ['status', 'updatedAt'];
-    }
-
-    function validSellerUpdate() {
-      let before = resource.data;
-      let after = request.resource.data;
-
-      // Allow if only permitted fields are being updated
-      let fieldsValid = request.writeFields.hasOnly(sellerUpdatableFields());
-
-      // Validate status transitions
-      let statusJumpAllowed =
-        (before.status == 'Draft' && after.status in ['Draft', 'Cancelled']) ||
-        (before.status == 'Agreed' && after.status in ['Paid', 'Dispatched', 'Cancelled']) ||
-        (before.status == 'Paid' && after.status == 'Dispatched') ||
-        (before.status == 'InQuery' && after.status in ['Completed', 'Cancelled']);
-
-      return fieldsValid && statusJumpAllowed;
+    function isBuyerUpdate(existingOrder, newOrder) {
+      // Buyers can agree, mark as delivered, or dispute.
+      let validTransitions = {
+        "Draft": ["Agreed"],
+        "Dispatched": ["Delivered"]
+      };
+      
+      // Dispute logic is special
+      if (existingOrder.status == "Delivered" && newOrder.status == "Disputed") {
+        if (existingOrder.paymentMethod == "Escrow" && existingOrder.escrowDeadline != null) {
+          return request.time < existingOrder.escrowDeadline && onlyStatusChanges(existingOrder, newOrder);
+        }
+        return false; // Can't dispute non-escrow orders
+      }
+      
+      let nextStatuses = validTransitions[existingOrder.status];
+      return nextStatuses != null && newOrder.status in nextStatuses && onlyStatusChanges(existingOrder, newOrder);
     }
 
-    function validBuyerUpdate() {
-      let before = resource.data;
-      let after = request.resource.data;
-
-      let fieldsValid = request.writeFields.hasOnly(buyerUpdatableFields());
-
-      let statusJumpAllowed =
-        (before.status == 'Draft' && after.status == 'Agreed') ||
-        (before.status == 'Dispatched' && after.status == 'Delivered') ||
-        (before.status == 'Delivered' && after.status in ['Completed', 'Disputed', 'InQuery']) ||
-        (before.status == 'InQuery' && after.status in ['Completed', 'Disputed']);
-
-      return fieldsValid && statusJumpAllowed;
-    }
-
-    match /orders/{orderId} {
-      allow read:   if isSignedIn() && (isSeller(resource.data) || isBuyer(resource.data) || isSystemAdmin());
-      allow create: if isSignedIn() && isSeller(request.resource.data);
-      allow update: if isSignedIn() && (
-                       isSystemAdmin() ||
-                       (isSeller(resource.data) && validSellerUpdate()) ||
-                       (isBuyer(resource.data)  && validBuyerUpdate())
-                    );
+    // Helper to ensure only the status can be changed by buyer/seller updates.
+    function onlyStatusChanges(existing, incoming) {
+      let data = incoming.data;
+      return data.size() == existing.data.size() + 1 && // only one field is added (updatedAt)
+             data.status != existing.data.status &&
+             data.sellerCompanyId == existing.data.sellerCompanyId &&
+             data.buyerCompanyId == existing.data.buyerCompanyId &&
+             data.currency == existing.data.currency &&
+             data.paymentMethod == existing.data.paymentMethod &&
+             data.platformFeePct == existing.data.platformFeePct &&
+             data.lines == existing.data.lines &&
+             data.totals == existing.data.totals;
     }
   }
 }
