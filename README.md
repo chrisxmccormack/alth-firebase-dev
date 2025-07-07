@@ -1,3 +1,4 @@
+
 # AlethiumCoreAuth
 
 This is a Next.js application for user authentication using Firebase, with support for company accounts and an admin approval workflow. It also includes a contact management system with a secure invite-link feature.
@@ -54,15 +55,16 @@ This project includes Firestore security rules in the `firestore.rules` file. Th
     ```bash
     firebase login
     ```
-3.  **Configure Admin UID in Rules**:
+3.  **⚠️ CONFIGURE ADMIN UID IN RULES (CRITICAL STEP) ⚠️**:
     - Open the `firestore.rules` file.
     - Find the line with the placeholder `'YOUR_ADMIN_UID_HERE'`.
-    - **You must replace this placeholder** with the same System Admin UID you set in your `.env.local` file. If you don't, the admin features and other parts of the app will not work correctly.
+    - **You must replace this placeholder** with the same System Admin UID you set in your `.env.local` file. 
+    - **If you do not do this, the rules deployment will fail silently on Firebase's servers, and your app will not have the correct permissions.**
 4.  **Deploy Rules**: From your project root, run:
     ```bash
     firebase deploy --only firestore:rules
     ```
-    You should see a "Deploy complete!" message. If you see any errors, double-check that you replaced the admin UID placeholder correctly.
+    You should see a "Deploy complete!" message. If you still encounter permission errors after this, double-check that you replaced the admin UID placeholder correctly and re-deploy.
 
 ### Authorized Domains
 

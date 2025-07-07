@@ -1,49 +1,69 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSystemAdmin(userId) {
-      // The admin UID must be in single quotes.
-      return userId == 'YOUR_ADMIN_UID_HERE';
+    // HELPER FUNCTIONS
+    
+    // Gets the data from the user's document in the /users collection.
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
     }
 
-    // A user can read and write to their own user document.
+    // Checks if the currently authenticated user is the designated System Administrator.
+    function isSystemAdmin() {
+      // IMPORTANT: You MUST replace 'YOUR_ADMIN_UID_HERE' with your actual Firebase UID before deploying.
+      // If you do not, your security rules will fail to apply correctly.
+      return request.auth != null && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    }
+
+    // Returns true if the user's companyId matches the one provided.
+    function isOwnerOfCompany(companyId) {
+        let userCompanyId = getUserData(request.auth.uid).companyId;
+        return request.auth != null && userCompanyId != null && userCompanyId == companyId;
+    }
+
+
+    // USERS COLLECTION
+    // Users can read and write their own user document.
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Company rules
-    match /companies/{companyId} {
-      // Any authenticated user can see the details of any *approved* company.
-      // This is necessary to show contact names, etc.
-      allow read: if request.auth != null && (
-        resource.data.status == 'Approved' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId
-      );
 
-      // An authenticated user can create a company.
+    // COMPANIES COLLECTION
+    match /companies/{companyId} {
+      // Any authenticated user can create a company profile (for initial setup).
       allow create: if request.auth != null;
 
+      // Anyone can read a company profile IF it is "Approved".
+      // The company owner or an admin can read it regardless of its status.
+      allow read: if (resource.data.status == 'Approved') ||
+                     (request.auth != null && request.auth.uid == resource.data.ownerUid) ||
+                     isSystemAdmin();
+      
       // Only the system admin can update a company (i.e., to approve it).
-      allow update: if request.auth != null && isSystemAdmin(request.auth.uid);
+      allow update: if isSystemAdmin();
     }
 
-    // Contact rules
+    
+    // CONTACTS COLLECTION
     match /contacts/{contactId} {
-      // To create a contact, the user must be authenticated,
-      // and the companyAId in the new document must match the companyId
-      // stored in that user's own document in the /users collection.
-      allow create: if request.auth != null &&
-                     exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyAId;
+      // Returns true if the user's company is either companyA or companyB in the contact.
+      function isPartyToContact() {
+        return isOwnerOfCompany(resource.data.companyAId) || isOwnerOfCompany(resource.data.companyBId);
+      }
+      
+      // Allow reading a contact document (get or list) if the user is a party to it.
+      // This rule is compatible with the client-side queries that filter by companyAId or companyBId.
+      allow read: if isPartyToContact();
 
-      // To read or update a contact, the user's company must be
-      // either companyA or companyB in the contact document.
-      allow read, update: if request.auth != null &&
-                           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyAId ||
-                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyBId);
+      // Allow creating a contact only if the creator's companyId is being set as companyAId.
+      allow create: if isOwnerOfCompany(request.resource.data.companyAId);
+
+      // Allow updating a contact (e.g., accepting an invite) if the user is a party to it.
+      allow update: if isPartyToContact();
     }
   }
 }
