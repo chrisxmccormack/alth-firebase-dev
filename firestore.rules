@@ -1,105 +1,125 @@
+
 rules_version = '2';
+
 service cloud.firestore {
-  match /databases/{db}/documents {
-
+  match /databases/{database}/documents {
+    
     // --- Helper Functions ---
+    
+    // Checks if the requesting user is the system admin.
     function isSystemAdmin() {
-      // IMPORTANT: Replace with your actual UID before deploying
-      return request.auth.uid == 'zcL2mAF06kcAPb68DMIfLmkYROE3';
+      // IMPORTANT: Replace with your actual Admin User UID
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
 
-    function isSignedIn() {
-      return request.auth != null;
+    // Gets the user's data from the /users collection.
+    // This is a safe function and does not throw an error if the doc doesn't exist.
+    function getUserData() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
     
-    // This function returns the user's document from the /users collection
-    function userDoc() {
-      return get(/databases/$(db)/documents/users/$(request.auth.uid));
+    // Safely gets the user's company ID. Returns null if not found.
+    function getUserCompanyId() {
+        return getUserData().data.companyId;
     }
     
-    // This function returns the user's company ID, but only if the user doc and companyId exist
-    function userCompanyId() {
-      return userDoc().data.companyId;
-    }
-
-    // This function checks if the user has a company associated with them
-    function userHasCompany() {
-      return exists(/databases/$(db)/documents/users/$(request.auth.uid)) && userDoc().data.companyId != null;
+    // Checks if the user is authenticated and part of an approved company.
+    function isUserApproved() {
+        let userCompanyId = getUserCompanyId();
+        // The user must have a companyId, and that company document must exist with status 'Approved'.
+        return userCompanyId != null && 
+               exists(/databases/$(database)/documents/companies/$(userCompanyId)) &&
+               get(/databases/$(database)/documents/companies/$(userCompanyId)).data.status == 'Approved';
     }
 
     // --- Collection Rules ---
 
     match /users/{userId} {
-      // Users can read, create, and update their own user document.
-      allow read, create, update: if isSignedIn() && request.auth.uid == userId;
-    }
+      // Allow a user to read their own data.
+      allow read: if request.auth.uid == userId;
 
-    match /companies/{companyId} {
-      // Any signed-in user can read company data. This is needed for populating partner info.
-      allow read: if isSignedIn();
-
-      // Allow creating a company if:
-      // 1. You are the owner of the new company being created.
-      // 2. You already have a company and are creating an ownerless company (for the 'Add Contact' feature).
-      allow create: if isSignedIn() && 
-        (request.resource.data.ownerUid == request.auth.uid || 
-         (request.resource.data.ownerUid == null && userHasCompany()));
+      // New users can create their own record.
+      allow create: if request.auth.uid == userId && request.resource.data.companyId == null;
       
-      // Only the System Admin can update a company (e.g., to approve it).
-      allow update: if isSystemAdmin();
+      // Allow users to update their record only when setting their companyId for the first time.
+      // No other updates are allowed through this rule.
+      allow update: if request.auth.uid == userId && 
+                       request.resource.data.companyId != resource.data.companyId &&
+                       resource.data.companyId == null;
+    }
+    
+    match /companies/{companyId} {
+        // Any authenticated user can read any company profile. 
+        // This is needed to populate partner details in contacts and orders.
+        allow read: if request.auth != null;
+      
+        // Allow creating a company if:
+        // 1. You are the owner creating your own company for the first time (status must be Pending).
+        // 2. You are an approved user creating a manual contact (ownerless, status is Approved).
+        allow create: if request.auth != null && (
+            (request.resource.data.ownerUid == request.auth.uid && request.resource.data.status == 'Pending') ||
+            (request.resource.data.ownerUid == null && request.resource.data.status == 'Approved' && isUserApproved())
+        );
+
+        // Only the System Admin can approve a company (change status from 'Pending' to 'Approved').
+        allow update: if isSystemAdmin() && 
+                         request.resource.data.status == 'Approved' &&
+                         resource.data.status == 'Pending';
     }
 
     match /contacts/{contactId} {
-      // Allow read if the user's company is in the 'members' array.
-      allow read: if userHasCompany() && userCompanyId() in resource.data.members;
+      // Allow read if the user's company is one of the members in the contact document.
+      allow read: if isUserApproved() && getUserCompanyId() in resource.data.members;
 
-      // Allow create if the user is creating the contact for their own company.
-      // This covers both invites and direct creation.
-      allow create: if userHasCompany() && request.resource.data.companyAId == userCompanyId();
-      
-      // Allow update only for accepting an invite. The user must be the invited party (companyB).
-      allow update: if userHasCompany() &&
+      // Allow creating a contact if:
+      // 1. Creating an invite link ('Pending'). User must be companyA.
+      // 2. Creating a direct connection ('Connected'). User must be companyA and approved.
+      // This rule does NOT check for the existence of companyBId, as it might be created in the same batch.
+      allow create: if request.auth != null && 
+                       isUserApproved() &&
+                       request.resource.data.companyAId == getUserCompanyId() &&
+                       (
+                         (request.resource.data.status == 'Pending' && request.resource.data.companyBId == null) ||
+                         (request.resource.data.status == 'Connected' && request.resource.data.companyBId != null)
+                       );
+
+      // Allow updating a contact if:
+      // 1. You are accepting an invite (as companyB). You can only add your ID and change status to 'Connected'.
+      allow update: if isUserApproved() &&
                        resource.data.status == 'Pending' &&
                        request.resource.data.status == 'Connected' &&
-                       request.resource.data.companyBId == userCompanyId();
+                       request.resource.data.companyBId == getUserCompanyId() &&
+                       request.resource.data.companyAId == resource.data.companyAId &&
+                       // Ensure no other fields are being maliciously changed
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyBId', 'status', 'members', 'inviteToken', 'expiresAt']);
     }
 
     match /orders/{orderId} {
-      // Allow read if the user's company is in the 'members' array.
-      allow read: if userHasCompany() && userCompanyId() in resource.data.members;
+        // Allow read if the user's company is one of the members in the order.
+        allow read: if isUserApproved() && getUserCompanyId() in resource.data.members;
 
-      // Allow create if the user's company is the seller.
-      allow create: if userHasCompany() && request.resource.data.sellerCompanyId == userCompanyId();
+        // Allow creating an order if user is the seller and is an approved user.
+        allow create: if isUserApproved() && 
+                         request.resource.data.sellerCompanyId == getUserCompanyId();
 
-      // Allow updates based on role and valid status transitions.
-      allow update: if userHasCompany() && (
-        (userCompanyId() == resource.data.sellerCompanyId && isSellerOrderUpdate(request, resource)) ||
-        (userCompanyId() == resource.data.buyerCompanyId && isBuyerOrderUpdate(request, resource))
-      );
-    }
-    
-    // --- Order Update Logic Functions ---
-    
-    function isSellerOrderUpdate(request, resource) {
-      let oldStatus = resource.data.status;
-      let newStatus = request.resource.data.status;
-      return (oldStatus == 'Agreed' && newStatus == 'Paid') ||
-             (oldStatus == 'Paid' && newStatus == 'Dispatched') ||
-             (newStatus == 'Cancelled' && oldStatus in ['Draft', 'Agreed']);
-    }
-    
-    function isBuyerOrderUpdate(request, resource) {
-      let oldStatus = resource.data.status;
-      let newStatus = request.resource.data.status;
-      // Allow disputing an Escrow order within the deadline
-      let canDispute = resource.data.paymentMethod == 'Escrow' && 
-                       resource.data.escrowDeadline != null && 
-                       resource.data.escrowDeadline > request.time;
-                       
-      return (oldStatus == 'Draft' && newStatus == 'Agreed') ||
-             (oldStatus == 'Dispatched' && newStatus == 'Delivered') ||
-             (oldStatus == 'Delivered' && newStatus == 'Disputed' && canDispute) ||
-             (oldStatus == 'Delivered' && newStatus == 'InQuery');
+        // Allow updates based on specific state transitions.
+        allow update: if isUserApproved() &&
+                         (
+                            // Buyer can agree to a draft
+                           (resource.data.status == 'Draft' && request.resource.data.status == 'Agreed' && getUserCompanyId() == resource.data.buyerCompanyId) ||
+                            // Buyer can mark as delivered
+                           (resource.data.status == 'Dispatched' && request.resource.data.status == 'Delivered' && getUserCompanyId() == resource.data.buyerCompanyId) ||
+                            // Buyer can dispute
+                           (resource.data.status == 'Delivered' && request.resource.data.status == 'Disputed' && getUserCompanyId() == resource.data.buyerCompanyId) ||
+                            // Seller can mark as paid, dispatched, or cancel
+                           (getUserCompanyId() == resource.data.sellerCompanyId && 
+                             (
+                               (resource.data.status == 'Agreed' && request.resource.data.status == 'Paid') ||
+                               (resource.data.status == 'Paid' && request.resource.data.status == 'Dispatched') ||
+                               ((resource.data.status == 'Draft' || resource.data.status == 'Agreed') && request.resource.data.status == 'Cancelled')
+                             )
+                           )
+                         );
     }
   }
 }
