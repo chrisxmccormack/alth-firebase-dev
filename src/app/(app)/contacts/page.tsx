@@ -33,7 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, UserPlus } from "lucide-react";
 import Loading from "./loading";
 
 export default function ContactsPage() {
@@ -153,12 +153,14 @@ export default function ContactsPage() {
           <h1 className="text-3xl font-bold font-headline">Contacts</h1>
           <p className="text-muted-foreground">Manage your business connections.</p>
         </div>
-        <Button asChild>
-          <Link href="/contacts/new">
-            <PlusCircle className="mr-2" />
-            Invite Contact
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+            <Button asChild>
+              <Link href="/contacts/new">
+                <PlusCircle className="mr-2" />
+                Invite Contact
+              </Link>
+            </Button>
+        </div>
       </div>
 
       <Card>
