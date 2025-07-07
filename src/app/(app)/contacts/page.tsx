@@ -50,7 +50,10 @@ export default function ContactsPage() {
   };
 
   const fetchContacts = useCallback(async () => {
-    if (!userData?.companyId) return;
+    if (!userData?.companyId) {
+        setIsLoading(false);
+        return;
+    };
 
     setIsLoading(true);
     const companyId = userData.companyId;
