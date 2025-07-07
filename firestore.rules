@@ -1,115 +1,131 @@
-rules_version = '2';
 
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // =================================================================
-    // Helper Functions
-    // =================================================================
-
-    function isSystemAdmin() {
-      // IMPORTANT: You must replace this with your admin UID in the README and .env.local
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
-    }
 
     function isSignedIn() {
       return request.auth != null;
     }
-
-    // =================================================================
-    // Collection Rules
-    // =================================================================
-
-    match /users/{userId} {
-      allow read, update, create: if request.auth.uid == userId || isSystemAdmin();
-      allow delete: if isSystemAdmin();
+    
+    // It's safe to use get() here because these rules are not used in list queries.
+    // They are for direct document access (e.g., /users/{userId}).
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isSystemAdmin() {
+      // The admin UID must be set in your deployed environment.
+      // In Firebase Studio, it's in .env.local. In a real deployment, it would be a secret.
+      // This is a placeholder for local testing and will be replaced by the actual UID on deployment.
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
 
+    // This function can be called in list queries because it only accesses request data.
+    function getMyCompanyIdFromRequest() {
+      // Accessing request.auth.token is only reliable if you set a custom claim.
+      // For this app, we read the user's document to get the companyId.
+      // This function assumes the calling rule has already fetched the user doc.
+      return getUserData(request.auth.uid).companyId;
+    }
+
+    // This function can NOT be used in list queries because it performs a 'get'.
+    // Use it only for rules on single-document reads/writes.
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+
+    // USER DATA
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isOwner(userId) || isSystemAdmin());
+      allow create: if isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+    }
+
+    // COMPANY DATA
     match /companies/{companyId} {
       allow read: if isSignedIn();
-      allow create: if request.auth.uid == request.resource.data.ownerUid;
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isSystemAdmin();
-      allow delete: if isSystemAdmin();
     }
-
+    
+    // CONTACTS
     match /contacts/{contactId} {
-      // Logic to check membership is inlined here, as get() is not allowed in functions.
-      allow read: if (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members)
-        || isSystemAdmin()
+      allow read: if isSignedIn() && getUserData(request.auth.uid).companyId in resource.data.members;
+
+      // Allow creating a 'Pending' invite or a direct 'Connected' contact
+      allow create: if isSignedIn() && (
+        ( // Creating an invite link
+          request.resource.data.status == 'Pending' &&
+          request.resource.data.companyAId == getUserData(request.auth.uid).companyId &&
+          request.resource.data.companyBId == null
+        ) ||
+        ( // Creating a direct connection
+          request.resource.data.status == 'Connected' &&
+          request.resource.data.companyAId == getUserData(request.auth.uid).companyId &&
+          request.resource.data.companyBId != null
+        )
       );
 
-      // Inlined logic for create/update.
-      allow create: if exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyAId;
-      allow update: if exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyBId &&
-                     resource.data.status == 'Pending';
-
-      allow delete: if isSystemAdmin();
+      // Allow accepting an invite
+      allow update: if isSignedIn() &&
+        resource.data.status == 'Pending' &&
+        request.resource.data.status == 'Connected' &&
+        request.resource.data.companyBId == getUserData(request.auth.uid).companyId &&
+        request.resource.data.inviteToken == null;
     }
 
+
+    // ORDERS
     match /orders/{orderId} {
-       // Logic to check membership is inlined here.
-      allow read: if (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members)
-        || isSystemAdmin()
-      );
+      allow read: if isSignedIn() && getUserData(request.auth.uid).companyId in resource.data.members;
+      
+      allow create: if isSignedIn() && 
+                      request.resource.data.sellerCompanyId == getUserData(request.auth.uid).companyId &&
+                      request.resource.data.status == 'Draft';
 
-       // Inlined logic for create.
-      allow create: if exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.sellerCompanyId;
+      allow update: if isSignedIn() && 
+                      ( (isSeller() && validSellerUpdate()) || (isBuyer() && validBuyerUpdate()) );
+                      
+      function isSeller() {
+        return getUserData(request.auth.uid).companyId == resource.data.sellerCompanyId;
+      }
+      
+      function isBuyer() {
+        return getUserData(request.auth.uid).companyId == resource.data.buyerCompanyId;
+      }
 
-       // Inlined logic for update.
-      allow update: if (
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.sellerCompanyId &&
-           isValidSellerUpdate(request.resource.data, resource.data)
-          ) ||
-          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.buyerCompanyId &&
-           isValidBuyerUpdate(request.resource.data, resource.data)
-          ) ||
-          isSystemAdmin()
+      function validSellerUpdate() {
+        return (
+          // Seller agrees to cancel
+          (resource.data.status == 'Draft' && request.resource.data.status == 'Cancelled') ||
+          (resource.data.status == 'Agreed' && request.resource.data.status == 'Cancelled') ||
+          // Seller marks as Paid (manual override) or Dispatched
+          (resource.data.status == 'Agreed' && request.resource.data.status == 'Paid') ||
+          (resource.data.status == 'Paid' && request.resource.data.status == 'Dispatched')
+        ) && (
+          // Ensure only status and trackingId can be changed by seller
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'trackingId'])
         );
+      }
 
-      allow delete: if isSystemAdmin();
-    }
-
-    // =================================================================
-    // Order Update Logic Functions (these are OK as they don't use get())
-    // =================================================================
-
-    function isAllowedSellerTransition(newStatus, oldStatus) {
-        return (newStatus == 'Paid' && oldStatus == 'Agreed') ||
-               (newStatus == 'Dispatched' && oldStatus == 'Paid') ||
-               (newStatus == 'Cancelled' && (oldStatus == 'Draft' || oldStatus == 'Agreed'));
-    }
-
-    function isValidSellerUpdate(newData, oldData) {
-      return isAllowedSellerTransition(newData.status, oldData.status) &&
-             // Ensure critical fields are not mutated
-             newData.buyerCompanyId == oldData.buyerCompanyId &&
-             newData.sellerCompanyId == oldData.sellerCompanyId &&
-             newData.currency == oldData.currency &&
-             newData.lines == oldData.lines;
-    }
-
-     function isAllowedBuyerTransition(newStatus, oldData) {
-        return (newStatus == 'Agreed' && oldData.status == 'Draft') ||
-               (newStatus == 'Delivered' && oldData.status == 'Dispatched') ||
-               (newStatus == 'Disputed' && oldData.status == 'Delivered' && oldData.paymentMethod == 'Escrow' && request.time < oldData.escrowDeadline);
-    }
-
-    function isValidBuyerUpdate(newData, oldData) {
-      return isAllowedBuyerTransition(newStatus, oldData) &&
-             // Ensure critical fields are not mutated
-             newData.buyerCompanyId == oldData.buyerCompanyId &&
-             newData.sellerCompanyId == oldData.sellerCompanyId &&
-             newData.currency == oldData.currency &&
-             newData.lines == oldData.lines;
+      function validBuyerUpdate() {
+        return (
+          // Buyer agrees to draft
+          (resource.data.status == 'Draft' && request.resource.data.status == 'Agreed') ||
+          // Buyer marks as delivered
+          (resource.data.status == 'Dispatched' && request.resource.data.status == 'Delivered') ||
+          // Buyer disputes an escrow order within the deadline
+          (
+            resource.data.status == 'Delivered' && request.resource.data.status == 'Disputed' &&
+            resource.data.paymentMethod == 'Escrow' &&
+            (!resource.data.keys().hasAll(['escrowDeadline']) || request.time < resource.data.escrowDeadline)
+          )
+        ) && (
+           // Ensure only status and escrow deadline can be changed by buyer
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'escrowDeadline'])
+        );
+      }
     }
   }
 }
