@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -157,13 +156,13 @@ export default function ContactsPage() {
             <Button asChild>
               <Link href="/contacts/new">
                 <PlusCircle className="mr-2" />
-                Invite Contact
+                Invite
               </Link>
             </Button>
             <Button asChild>
               <Link href="/contacts/new">
                 <UserPlus className="mr-2" />
-                Create New Contact
+                Create
               </Link>
             </Button>
         </div>
