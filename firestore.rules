@@ -1,119 +1,95 @@
-
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{database}/documents {
+  match /databases/{db}/documents {
 
     // --- Helper Functions ---
-    function isUserAuthenticated() {
+    // These functions can be used across different rule matches.
+
+    function isSignedIn() {
       return request.auth != null;
     }
-    
-    function getUserData(uid) {
-      // It's crucial to check for existence before accessing data
-      return get(/databases/$(database)/documents/users/$(uid));
-    }
 
+    // NOTE: Make sure to replace 'YOUR_ADMIN_UID_HERE' below
+    // with the actual Firebase UID of your system administrator.
     function isSystemAdmin() {
-      // IMPORTANT: Replace this placeholder with your actual System Admin UID
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
-    }
-    
-    function userCompanyId() {
-      // Check for existence before accessing .data
-      let userData = getUserData(request.auth.uid);
-      return userData.exists ? userData.data.companyId : null;
+      return isSignedIn() && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
 
-    // --- User and Company Rules ---
+    // This function safely retrieves the company ID for the currently
+    // authenticated user from the /users collection.
+    function getMyCompanyId() {
+      return get(/databases/$(db)/documents/users/$(request.auth.uid)).data.companyId;
+    }
+
+    // --- Rules for Collections ---
+
     match /users/{userId} {
-      allow read, write: if isUserAuthenticated() && (request.auth.uid == userId || isSystemAdmin());
-      allow create: if isUserAuthenticated();
+      // Users can create their own user document upon signup.
+      allow create: if request.auth.uid == userId;
+
+      // Users can read or update their own data. Admins can read/update anyone.
+      allow read, update: if request.auth.uid == userId || isSystemAdmin();
     }
 
     match /companies/{companyId} {
-      allow read: if isUserAuthenticated();
-      allow create: if isUserAuthenticated();
-      allow update: if isUserAuthenticated() && (userCompanyId() == companyId || isSystemAdmin());
-    }
+      // Any signed-in user can view company profiles (e.g., for lookups).
+      allow read: if isSignedIn();
 
-    // --- Contact Rules ---
-    match /contacts/{contactId} {
-      allow read: if isUserAuthenticated() && 
-                   (resource.data.companyAId == userCompanyId() || 
-                    resource.data.companyBId == userCompanyId() ||
-                    isSystemAdmin());
-      allow create: if isUserAuthenticated() && request.resource.data.companyAId == userCompanyId();
-      allow update: if isUserAuthenticated() && 
-                     (resource.data.companyAId == userCompanyId() || 
-                      resource.data.companyBId == userCompanyId() ||
-                      isSystemAdmin());
-    }
-
-    // --- Order Rules ---
-    match /orders/{orderId} {
-      allow read: if isUserAuthenticated() && 
-                   (resource.data.sellerCompanyId == userCompanyId() ||
-                    resource.data.buyerCompanyId == userCompanyId() ||
-                    isSystemAdmin());
-
-      allow create: if isUserAuthenticated() &&
-                     request.resource.data.sellerCompanyId == userCompanyId();
+      // A user can create a company if they are listed as the owner in the new document.
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       
-      allow update: if isUserAuthenticated() &&
-                     ((resource.data.sellerCompanyId == userCompanyId() && isSellerUpdate(resource.data, request.resource.data)) ||
-                      (resource.data.buyerCompanyId == userCompanyId() && isBuyerUpdate(resource.data, request.resource.data)) ||
-                      isSystemAdmin());
+      // Only the company owner or a system admin can update a company profile.
+      // This is used for both profile edits and admin approvals.
+      allow update: if (get(/databases/$(db)/documents/companies/$(companyId)).data.ownerUid == request.auth.uid) || isSystemAdmin();
     }
     
-    // --- Order Update Logic ---
-    function isSellerUpdate(existingOrder, newOrder) {
-      // Sellers can mark as paid or dispatched, or cancel early on.
-      let validTransitions = {
-        "Agreed": ["Paid", "Cancelled"],
-        "Paid": ["Dispatched"]
-      };
-      
-      // Also allow cancelling a draft order.
-      if (existingOrder.status == "Draft" && newOrder.status == "Cancelled") {
-        return true;
-      }
-      
-      let nextStatuses = validTransitions[existingOrder.status];
-      // Only allow status field to be changed to a valid next state
-      return nextStatuses != null && newOrder.status in nextStatuses && onlyStatusChanges(existingOrder, newOrder);
+    match /contacts/{contactId} {
+      // A user can read a contact document if their company is either companyA or companyB.
+      allow read: if isSignedIn() && (
+        resource.data.companyAId == getMyCompanyId() ||
+        resource.data.companyBId == getMyCompanyId()
+      );
+
+      // A user can create an invite if their company is listed as companyA.
+      allow create: if isSignedIn() && request.resource.data.companyAId == getMyCompanyId();
+
+      // An invited user (companyB) can update the contact to accept the invitation.
+      // The system admin can also update contacts.
+      // We restrict the fields a user can change to prevent them from altering companyA, etc.
+      allow update: if (isSignedIn() && 
+                       request.resource.data.companyBId == getMyCompanyId() &&
+                       request.resource.data.companyAId == resource.data.companyAId &&
+                       request.resource.data.status == 'Connected'
+                      ) || isSystemAdmin();
     }
 
-    function isBuyerUpdate(existingOrder, newOrder) {
-      // Buyers can agree, mark as delivered, or dispute.
-      let validTransitions = {
-        "Draft": ["Agreed"],
-        "Dispatched": ["Delivered"]
-      };
-      
-      // Dispute logic is special
-      if (existingOrder.status == "Delivered" && newOrder.status == "Disputed") {
-        if (existingOrder.paymentMethod == "Escrow" && existingOrder.escrowDeadline != null) {
-          return request.time < existingOrder.escrowDeadline && onlyStatusChanges(existingOrder, newOrder);
-        }
-        return false; // Can't dispute non-escrow orders
+    match /orders/{orderId} {
+      // --- Order-specific helper functions ---
+      function isSeller() {
+        return resource.data.sellerCompanyId == getMyCompanyId();
       }
-      
-      let nextStatuses = validTransitions[existingOrder.status];
-      return nextStatuses != null && newOrder.status in nextStatuses && onlyStatusChanges(existingOrder, newOrder);
-    }
+      function isBuyer() {
+        return resource.data.buyerCompanyId == getMyCompanyId();
+      }
+      function incomingData() {
+        return request.resource.data;
+      }
+      // --- End Order-specific functions ---
 
-    // Helper to ensure only the status can be changed by buyer/seller updates.
-    function onlyStatusChanges(existing, incoming) {
-      let data = incoming.data;
-      return data.size() == existing.data.size() + 1 && // only one field is added (updatedAt)
-             data.status != existing.data.status &&
-             data.sellerCompanyId == existing.data.sellerCompanyId &&
-             data.buyerCompanyId == existing.data.buyerCompanyId &&
-             data.currency == existing.data.currency &&
-             data.paymentMethod == existing.data.paymentMethod &&
-             data.platformFeePct == existing.data.platformFeePct &&
-             data.lines == existing.data.lines &&
-             data.totals == existing.data.totals;
+      allow read: if isSignedIn() && (isSeller() || isBuyer() || isSystemAdmin());
+
+      // Only the seller can create an order.
+      allow create: if isSignedIn() && incomingData().sellerCompanyId == getMyCompanyId();
+
+      // Update permissions are based on the user's role (seller/buyer) and the
+      // status transition they are trying to make.
+      allow update: if isSignedIn() && (
+        isSystemAdmin() ||
+        // Seller actions
+        (isSeller() && incomingData().status in ['Paid', 'Dispatched', 'Cancelled']) ||
+        // Buyer actions
+        (isBuyer() && incomingData().status in ['Agreed', 'Delivered', 'Disputed', 'InQuery'])
+      );
     }
   }
 }
