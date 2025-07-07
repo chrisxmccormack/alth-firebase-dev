@@ -123,12 +123,14 @@ export async function createDirectContact(
       country: string;
       vatId?: string;
       website?: string;
+      firstName: string;
+      lastName: string;
       contactEmail: string;
     },
     relationship: { buyer: boolean; seller: boolean }
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const { contactEmail, ...companyData } = formData;
+      const { contactEmail, firstName, lastName, ...companyData } = formData;
       const batch = writeBatch(firestore!);
   
       // 1. Create the new company
@@ -140,6 +142,8 @@ export async function createDirectContact(
         createdAt: serverTimestamp(),
         ownerUid: null, // No owner, as this is a manually created contact
         ownerEmail: contactEmail,
+        ownerFirstName: firstName,
+        ownerLastName: lastName,
       });
   
       // 2. Create the contact link

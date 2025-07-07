@@ -10,6 +10,7 @@ export interface UserData {
   perms: {
     admin: boolean;
     buyer: boolean;
+
     seller: boolean;
   };
 }
@@ -29,6 +30,8 @@ export interface Company {
   createdAt: Timestamp;
   ownerUid?: string;
   ownerEmail?: string;
+  ownerFirstName?: string;
+  ownerLastName?: string;
 }
 
 export interface Contact {

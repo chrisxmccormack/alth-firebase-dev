@@ -54,6 +54,8 @@ const createContactSchema = z
       .or(z.literal("")),
 
     // Contact Person
+    firstName: z.string().min(1, { message: "First name is required." }),
+    lastName: z.string().min(1, { message: "Last name is required." }),
     contactEmail: z.string().email({ message: "A valid email is required." }),
 
     // Relationship
@@ -95,6 +97,8 @@ export function InviteContactPanel({ onContactCreated }: CreateContactPanelProps
       country: "",
       vatId: "",
       website: "",
+      firstName: "",
+      lastName: "",
       contactEmail: "",
       isBuyer: false,
       isSeller: false,
@@ -159,14 +163,6 @@ export function InviteContactPanel({ onContactCreated }: CreateContactPanelProps
                   <FormItem>
                     <FormLabel>Company Name</FormLabel>
                     <FormControl><Input placeholder="Partner Corp." {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField control={form.control} name="contactEmail" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Contact Email</FormLabel>
-                    <FormControl><Input placeholder="contact@partner.com" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -241,6 +237,37 @@ export function InviteContactPanel({ onContactCreated }: CreateContactPanelProps
                   )}
                 />
              </div>
+
+            <div>
+                <h3 className="text-lg font-medium">Contact Person</h3>
+                <p className="text-sm text-muted-foreground">The primary contact at this company.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <FormField control={form.control} name="firstName" render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>First Name</FormLabel>
+                       <FormControl><Input placeholder="Jane" {...field} /></FormControl>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+                 />
+                 <FormField control={form.control} name="lastName" render={({ field }) => (
+                     <FormItem>
+                       <FormLabel>Last Name</FormLabel>
+                       <FormControl><Input placeholder="Smith" {...field} /></FormControl>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+                 />
+              </div>
+               <FormField control={form.control} name="contactEmail" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Email</FormLabel>
+                    <FormControl><Input placeholder="contact@partner.com" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div>
                 <h3 className="text-lg font-medium">Relationship</h3>
