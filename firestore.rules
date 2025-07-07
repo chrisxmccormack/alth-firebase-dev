@@ -1,82 +1,97 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- HELPER FUNCTIONS ---
-
+    // =============================================
+    // Helper Functions
+    // =============================================
     function isSignedIn() {
       return request.auth != null;
     }
 
     function isSystemAdmin() {
-      // IMPORTANT: Replace with your actual Firebase UID for the system admin.
+      // CRITICAL: Replace with your actual Admin User UID. Keep the quotes!
       return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
 
-    // Get the user's data from the /users collection
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-
-    // Check if the currently signed-in user's company is approved.
-    // This is the main check for most operations.
-    function isApprovedUser() {
-      let companyId = getUserData().companyId;
-      if (companyId == null) {
-        return false;
-      }
-      let companyStatus = get(/databases/$(database)/documents/companies/$(companyId)).data.status;
-      return isSignedIn() && companyStatus == 'Approved';
+    
+    function ownCompanyId() {
+      return getUserData().companyId;
     }
 
-    // --- RULES ---
+    // Check if the user's own company has been approved.
+    // This requires a read on the user's company document.
+    function isUserApproved() {
+      let companyId = ownCompanyId();
+      return companyId != null && get(/databases/$(database)/documents/companies/$(companyId)).data.status == 'Approved';
+    }
+
+    function isMember(docData) {
+      return ownCompanyId() in docData.members;
+    }
+    
+    // =============================================
+    // Collection Rules
+    // =============================================
 
     match /users/{userId} {
+      // Users can read and update their own user document.
       allow read, update: if isSignedIn() && request.auth.uid == userId;
-      // Allow a user to be created when they sign up.
+      // Any signed-in user can create their own user document upon registration.
       allow create: if isSignedIn();
     }
 
     match /companies/{companyId} {
-      // Allow any signed-in user to read company data. This is needed to display partner info.
-      allow read: if isSignedIn();
+      // A user can read their own company document OR any company that is approved.
+      // This is the key fix to prevent circular permission dependencies.
+      allow read: if isSignedIn() && (request.auth.uid == resource.data.ownerUid || resource.data.status == 'Approved');
+      
+      // A user can create a company for themselves.
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
 
-      // Only the system admin or the company's owner can update a company document.
-      allow update: if isSystemAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
-
-      // A user can create a company if:
-      // 1. They are creating their own company during setup (ownerUid matches their uid).
-      // 2. They are an approved user creating a company for a direct contact (ownerUid is null).
-      allow create: if (isSignedIn() && request.resource.data.ownerUid == request.auth.uid)
-                    || (isApprovedUser() && request.resource.data.ownerUid == null);
+      // Only the System Admin can approve a company.
+      // Other updates are disallowed for now for security.
+      allow update: if isSystemAdmin() && request.resource.data.status == 'Approved';
     }
 
     match /contacts/{contactId} {
-      // Allow read if the user's company is in the contact's 'members' array.
-      allow read: if isApprovedUser() && resource.data.members.hasAny([getUserData().companyId]);
+      allow read: if isUserApproved() && isMember(resource.data);
 
-      // Allow creating a contact if the user is approved.
-      // This rule works for both creating an invite link and direct creation.
-      allow create: if isApprovedUser() && request.resource.data.members.hasAny([getUserData().companyId]);
+      // To update a contact, you must be the one accepting the invite.
+      allow update: if isUserApproved()
+        && request.resource.data.companyBId == ownCompanyId()
+        && ownCompanyId() in request.resource.data.members
+        && resource.data.status == 'Pending'
+        && request.resource.data.status == 'Connected';
 
-      // Allow updating a contact (i.e., accepting an invite) if the user is approved,
-      // and their company is being added as companyBId.
-      allow update: if isApprovedUser()
-                    && request.resource.data.companyBId == getUserData().companyId
-                    && resource.data.companyBId == null;
+      // Creating a contact has two valid scenarios.
+      allow create: if isUserApproved() && (
+        // Scenario 1: Generating an invite link.
+        (
+          request.resource.data.status == 'Pending' &&
+          request.resource.data.companyAId == ownCompanyId() &&
+          request.resource.data.companyBId == null
+        ) ||
+        // Scenario 2: Direct creation (batched write).
+        (
+          request.resource.data.status == 'Connected' &&
+          request.resource.data.companyAId == ownCompanyId() &&
+          // Check that the partner company being created in the same transaction
+          // does not have an owner (it's manually created contact data).
+          getAfter(/databases/$(database)/documents/companies/$(request.resource.data.companyBId)).data.ownerUid == null
+        )
+      );
     }
-
+    
     match /orders/{orderId} {
-      // Allow read if the user's company is in the order's 'members' array.
-      allow read: if isApprovedUser() && resource.data.members.hasAny([getUserData().companyId]);
-      
-      // Allow create if the user is approved and is the seller.
-      allow create: if isApprovedUser() && request.resource.data.sellerCompanyId == getUserData().companyId;
-      
-      // Allow update if the user's company is in the order's 'members' array.
-      allow update: if isApprovedUser() && resource.data.members.hasAny([getUserData().companyId]);
+      allow read, update: if isUserApproved() && isMember(resource.data);
+      allow create: if isUserApproved() 
+        && request.resource.data.sellerCompanyId == ownCompanyId()
+        && isMember(request.resource.data);
     }
   }
 }
