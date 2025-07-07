@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -17,6 +18,11 @@ import type { Company, Contact, PopulatedContact } from "@/types";
 
 import { Button } from "@/components/ui/button";
 import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -34,11 +40,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PlusCircle, UserPlus } from "lucide-react";
 import Loading from "./loading";
+import { InviteContactPanel } from "./invite-panel";
 
 export default function ContactsPage() {
   const { userData } = useAuth();
   const [contacts, setContacts] = useState<PopulatedContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreatePanelOpen, setCreatePanelOpen] = useState(false);
 
   const getRelationshipType = (contact: PopulatedContact) => {
     const { buyer, seller } = contact.relationship;
@@ -159,12 +167,17 @@ export default function ContactsPage() {
                 Invite
               </Link>
             </Button>
-            <Button asChild>
-              <Link href="/contacts/new">
-                <UserPlus className="mr-2" />
-                Create
-              </Link>
-            </Button>
+            <Sheet open={isCreatePanelOpen} onOpenChange={setCreatePanelOpen}>
+              <SheetTrigger asChild>
+                <Button>
+                  <UserPlus className="mr-2" />
+                  Create
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-full sm:max-w-xl p-0">
+                  <InviteContactPanel onContactCreated={() => setCreatePanelOpen(false)} />
+              </SheetContent>
+            </Sheet>
         </div>
       </div>
 

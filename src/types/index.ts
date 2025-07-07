@@ -1,3 +1,4 @@
+
 import type { Timestamp } from "firebase/firestore";
 
 export interface UserData {
@@ -26,8 +27,8 @@ export interface Company {
   logoUrl?: string;
   status: 'Pending' | 'Approved';
   createdAt: Timestamp;
-  ownerUid: string;
-  ownerEmail: string;
+  ownerUid?: string;
+  ownerEmail?: string;
 }
 
 export interface Contact {

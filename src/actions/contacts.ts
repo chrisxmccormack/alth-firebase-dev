@@ -111,3 +111,51 @@ export async function acceptInvite(
     return { success: false, error: error.message };
   }
 }
+
+export async function createDirectContact(
+    currentCompanyId: string,
+    formData: {
+      name: string;
+      addressLine1: string;
+      addressLine2?: string;
+      city: string;
+      postcode: string;
+      country: string;
+      vatId?: string;
+      website?: string;
+      contactEmail: string;
+    },
+    relationship: { buyer: boolean; seller: boolean }
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { contactEmail, ...companyData } = formData;
+      const batch = writeBatch(firestore!);
+  
+      // 1. Create the new company
+      const newCompanyRef = doc(collection(firestore!, 'companies'));
+      batch.set(newCompanyRef, {
+        ...companyData,
+        logoUrl: '', // No logo upload in this flow
+        status: 'Approved', // Manually created contacts are pre-approved
+        createdAt: serverTimestamp(),
+        ownerUid: null, // No owner, as this is a manually created contact
+        ownerEmail: contactEmail,
+      });
+  
+      // 2. Create the contact link
+      const contactRef = doc(collection(firestore!, 'contacts'));
+      batch.set(contactRef, {
+        companyAId: currentCompanyId,
+        companyBId: newCompanyRef.id,
+        relationship,
+        status: 'Connected',
+        createdAt: serverTimestamp(),
+      });
+  
+      await batch.commit();
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error creating direct contact:', error);
+      return { success: false, error: error.message };
+    }
+  }
