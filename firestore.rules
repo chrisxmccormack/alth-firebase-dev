@@ -3,12 +3,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =================================
+    // =================================================================
     // Helper Functions
-    // =================================
+    // =================================================================
 
     function isSystemAdmin() {
-      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with the actual UID from your Firebase project.
+      // IMPORTANT: You must replace this with your admin UID in the README and .env.local
       return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
 
@@ -16,69 +16,100 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isMyUserDocument(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-    
-    function getUserCompanyId(uid) {
-        // This function returns the companyId from a user's document.
-        // It's designed to be used in rules that will fail gracefully if the path doesn't exist.
-        return get(/databases/$(database)/documents/users/$(uid)).data.companyId;
-    }
-
-    function isMemberOf(doc) {
-      // This function checks if the currently authenticated user's company
-      // is listed in the 'members' array of a given document (e.g., an order or contact).
-      // It will safely return false if the user document or companyId does not exist.
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return userDoc.exists &&
-             'companyId' in userDoc.data &&
-             userDoc.data.companyId in doc.data.members;
-    }
-
-    // =================================
+    // =================================================================
     // Collection Rules
-    // =================================
+    // =================================================================
 
     match /users/{userId} {
-      // A user can create, read, and write to their own user document.
-      allow read, write: if isMyUserDocument(userId);
+      allow read, update, create: if request.auth.uid == userId || isSystemAdmin();
+      allow delete: if isSystemAdmin();
     }
 
     match /companies/{companyId} {
-      // Anyone signed in can read basic company info (needed for invites/lookups).
       allow read: if isSignedIn();
-
-      // A user can create a company document for themselves.
-      allow create: if request.auth.uid == request.resource.data.ownerUid
-                      && request.resource.data.status == 'Pending';
-
-      // An owner can update their company, but NOT the status. The admin can update anything.
-      allow update: if (request.auth.uid == resource.data.ownerUid && request.resource.data.status == resource.data.status)
-                    || isSystemAdmin();
+      allow create: if request.auth.uid == request.resource.data.ownerUid;
+      allow update: if isSystemAdmin();
+      allow delete: if isSystemAdmin();
     }
 
     match /contacts/{contactId} {
-      // Allow read if user is a member of the contact or is an admin.
-      allow read: if isMemberOf(resource) || isSystemAdmin();
+      // Logic to check membership is inlined here, as get() is not allowed in functions.
+      allow read: if (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members)
+        || isSystemAdmin()
+      );
 
-      // Allow creating a contact if you are companyA.
-      allow create: if request.resource.data.companyAId == getUserCompanyId(request.auth.uid);
+      // Inlined logic for create/update.
+      allow create: if exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyAId;
+      allow update: if exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyBId &&
+                     resource.data.status == 'Pending';
 
-      // Allow companyB to accept the invite, or admin to update.
-      allow update: if (request.resource.data.companyBId == getUserCompanyId(request.auth.uid)) || isSystemAdmin();
+      allow delete: if isSystemAdmin();
     }
 
     match /orders/{orderId} {
-      // Allow read if user's company is a member of the order or is an admin.
-      allow read: if isMemberOf(resource) || isSystemAdmin();
+       // Logic to check membership is inlined here.
+      allow read: if (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members)
+        || isSystemAdmin()
+      );
 
-      // Allow creating an order if you are the seller.
-      allow create: if request.resource.data.sellerCompanyId == getUserCompanyId(request.auth.uid);
+       // Inlined logic for create.
+      allow create: if exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.sellerCompanyId;
 
-      // Allow updates only by members of the order or admins.
-      // The server-side actions are responsible for validating the specific status transitions.
-      allow update: if isMemberOf(resource) || isSystemAdmin();
+       // Inlined logic for update.
+      allow update: if (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.sellerCompanyId &&
+           isValidSellerUpdate(request.resource.data, resource.data)
+          ) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.buyerCompanyId &&
+           isValidBuyerUpdate(request.resource.data, resource.data)
+          ) ||
+          isSystemAdmin()
+        );
+
+      allow delete: if isSystemAdmin();
+    }
+
+    // =================================================================
+    // Order Update Logic Functions (these are OK as they don't use get())
+    // =================================================================
+
+    function isAllowedSellerTransition(newStatus, oldStatus) {
+        return (newStatus == 'Paid' && oldStatus == 'Agreed') ||
+               (newStatus == 'Dispatched' && oldStatus == 'Paid') ||
+               (newStatus == 'Cancelled' && (oldStatus == 'Draft' || oldStatus == 'Agreed'));
+    }
+
+    function isValidSellerUpdate(newData, oldData) {
+      return isAllowedSellerTransition(newData.status, oldData.status) &&
+             // Ensure critical fields are not mutated
+             newData.buyerCompanyId == oldData.buyerCompanyId &&
+             newData.sellerCompanyId == oldData.sellerCompanyId &&
+             newData.currency == oldData.currency &&
+             newData.lines == oldData.lines;
+    }
+
+     function isAllowedBuyerTransition(newStatus, oldData) {
+        return (newStatus == 'Agreed' && oldData.status == 'Draft') ||
+               (newStatus == 'Delivered' && oldData.status == 'Dispatched') ||
+               (newStatus == 'Disputed' && oldData.status == 'Delivered' && oldData.paymentMethod == 'Escrow' && request.time < oldData.escrowDeadline);
+    }
+
+    function isValidBuyerUpdate(newData, oldData) {
+      return isAllowedBuyerTransition(newStatus, oldData) &&
+             // Ensure critical fields are not mutated
+             newData.buyerCompanyId == oldData.buyerCompanyId &&
+             newData.sellerCompanyId == oldData.sellerCompanyId &&
+             newData.currency == oldData.currency &&
+             newData.lines == oldData.lines;
     }
   }
 }
