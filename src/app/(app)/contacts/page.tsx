@@ -60,8 +60,7 @@ export default function ContactsPage() {
     const q = query(
       collection(firestore!, "contacts"),
       where("status", "==", "Connected"),
-      where("companyAId", "in", [companyId, null]), // Firestore limitation requires this
-      // We will filter client-side for companyBId
+      where("companyAId", "==", companyId)
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
