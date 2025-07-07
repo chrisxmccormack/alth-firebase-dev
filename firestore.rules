@@ -3,74 +3,56 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Helper function to check if the user is the system admin.
+    // The admin UID is a placeholder that should be replaced before deployment.
+    function isSystemAdmin() {
+      return request.auth != null && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    }
     
-    //----------------------------------------------------------------------
-    // Users
+    // Helper function to get the current user's company ID from their user document.
+    function getUserCompanyId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId;
+    }
+
+    // Helper function to check if the current user is a party to a contact.
+    function isPartyInContact() {
+      let userCompanyId = getUserCompanyId();
+      return userCompanyId != null &&
+             (userCompanyId == resource.data.companyAId ||
+              userCompanyId == resource.data.companyBId);
+    }
+
     // Users can read and write their own document.
-    //----------------------------------------------------------------------
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    //----------------------------------------------------------------------
-    // Companies
-    //----------------------------------------------------------------------
+    // Company rules
     match /companies/{companyId} {
-      // Is the requesting user the owner of the company document?
-      function isOwner() {
-        return request.auth != null && request.auth.uid == resource.data.ownerUid;
-      }
-
-      // Any signed-in user can create a company profile.
+      // Any authenticated user can create a company profile.
       allow create: if request.auth != null;
       
-      // Only the company owner or system admin can update their own company profile.
-      allow update: if isOwner() || isSystemAdmin();
-      
-      // Any signed-in user can view any 'Approved' company's profile.
-      // The company owner can always view their own profile, regardless of status.
-      allow read: if (request.auth != null && resource.data.status == 'Approved') || isOwner();
+      // Users can read their own company document.
+      // Any user can read any other company's document if it has been approved.
+      allow read: if request.auth != null &&
+                     (getUserCompanyId() == companyId ||
+                      (exists(/databases/$(database)/documents/companies/$(companyId)) &&
+                       get(/databases/$(database)/documents/companies/$(companyId)).data.status == 'Approved'));
+                       
+      // Only the system admin can update a company (to approve it).
+      allow update: if isSystemAdmin();
     }
 
-    //----------------------------------------------------------------------
-    // Contacts
-    //----------------------------------------------------------------------
+    // Contacts rules
     match /contacts/{contactId} {
-      // Can this user view this contact? (Are they companyA or companyB?)
-      allow read: if isPartyInContact(resource.data);
-
-      // An authenticated user can create a contact (an invitation)
-      // IF the companyAId in the new document matches their own companyId from their user profile.
-      // This is the CRITICAL FIX: we must `get()` the user doc, not use `request.auth.token.companyId`.
-      allow create: if request.auth != null && 
-                     request.resource.data.companyAId == getUserData(request.auth.uid).companyId;
-
-      // Either party in a contact can update it (e.g., to accept an invite).
-      allow update: if isPartyInContact(resource.data);
-    }
-
-    //----------------------------------------------------------------------
-    // Helper Functions
-    //----------------------------------------------------------------------
-
-    // Is the user the system administrator?
-    function isSystemAdmin() {
-      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with your actual Firebase Admin User ID.
-      // This UID should be hardcoded here and also set in your .env.local
-      return request.auth != null && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
-    }
-    
-    // Get the user's data document from the /users collection.
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
-    }
-
-    // Is the user's company part of this contact document?
-    function isPartyInContact(contact) {
-      let userCompanyId = getUserData(request.auth.uid).companyId;
-      return userCompanyId != null &&
-             (userCompanyId == contact.companyAId ||
-              userCompanyId == contact.companyBId);
+      // A user can read or update a contact document if their company is part of it.
+      allow read, update: if isPartyInContact();
+      
+      // A user can create a contact document if they are authenticated and the
+      // creating company (companyAId) matches their own company ID.
+      allow create: if request.auth != null &&
+                     getUserCompanyId() == request.resource.data.companyAId;
     }
   }
 }
