@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   collection,
   query,
@@ -32,8 +33,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetTrigger, SheetContent } from "@/components/ui/sheet";
-import { InviteContactPanel } from "./invite-panel";
 import { PlusCircle } from "lucide-react";
 import Loading from "./loading";
 
@@ -41,7 +40,6 @@ export default function ContactsPage() {
   const { userData } = useAuth();
   const [contacts, setContacts] = useState<PopulatedContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
 
   const getRelationshipType = (contact: PopulatedContact) => {
     const { buyer, seller } = contact.relationship;
@@ -152,17 +150,12 @@ export default function ContactsPage() {
           <h1 className="text-3xl font-bold font-headline">Contacts</h1>
           <p className="text-muted-foreground">Manage your business connections.</p>
         </div>
-        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-          <SheetTrigger asChild>
-            <Button>
-              <PlusCircle className="mr-2" />
-              Invite Contact
-            </Button>
-          </SheetTrigger>
-          <SheetContent className="w-full max-w-none sm:max-w-md">
-            <InviteContactPanel onInviteCreated={() => setIsSheetOpen(false)} />
-          </SheetContent>
-        </Sheet>
+        <Button asChild>
+          <Link href="/contacts/new">
+            <PlusCircle className="mr-2" />
+            Invite Contact
+          </Link>
+        </Button>
       </div>
 
       <Card>
@@ -176,7 +169,9 @@ export default function ContactsPage() {
           {contacts.length === 0 ? (
             <div className="text-center py-10">
               <p className="text-muted-foreground">You have no connections yet.</p>
-              <Button variant="link" onClick={() => setIsSheetOpen(true)}>Invite your first contact</Button>
+              <Button variant="link" asChild>
+                <Link href="/contacts/new">Invite your first contact</Link>
+              </Button>
             </div>
           ) : (
             <Table>
