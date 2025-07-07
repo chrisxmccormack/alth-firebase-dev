@@ -1,52 +1,39 @@
-
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper function to check if the user is the designated System Administrator.
-    // The Admin UID must be configured correctly for the admin panel and company approvals to work.
-    function isSystemAdmin() {
-      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with the actual Firebase UID of the system admin.
-      // This UID must be in quotes, e.g., 'Abc123xyz...'.
-      // Failure to replace this will cause your security rules to fail deployment silently.
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
-    }
-
-    // A user can read and update their own user document.
-    // Creation happens on sign-up (via trusted server-side code), not directly from the client.
+    
+    // --- USERS ---
     match /users/{userId} {
-      allow read, update: if request.auth.uid == userId;
-      allow create, delete: if false;
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Company documents
+    // --- COMPANIES ---
     match /companies/{companyId} {
-      // Any authenticated user can create a company document during the setup flow.
+      // Any authenticated user can create a company profile.
       allow create: if request.auth != null;
 
-      // Only the company owner or a System Admin can read a company document.
-      // Additionally, any authenticated user can read the profile of an *Approved* company.
-      // This is necessary for the contacts feature to display company names.
-      allow read: if request.auth != null &&
-                   (resource.data.ownerUid == request.auth.uid ||
-                    isSystemAdmin() ||
-                    resource.data.status == 'Approved');
+      // Authenticated users can read a company's details if that company has been approved.
+      // This is necessary for contacts to be able to see each other's company names.
+      allow read: if request.auth != null && resource.data.status == 'Approved';
 
-      // Only the System Admin can update a company (i.e., to approve it).
-      allow update: if request.auth != null && isSystemAdmin();
+      // Only the designated System Admin can update a company (i.e., to approve it).
+      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with the actual UID from Firebase Auth.
+      allow update: if request.auth != null && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
 
-    // Contact documents
+    // --- CONTACTS ---
     match /contacts/{contactId} {
-      // Allow creation if the user is the owner of the company initiating the invite.
+      // The user creating the contact must exist in the /users collection
+      // and the companyAId they are providing must match their own companyId.
       allow create: if request.auth != null &&
-                     get(/databases/$(database)/documents/companies/$(request.resource.data.companyAId)).data.ownerUid == request.auth.uid;
+                     exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyAId;
 
-      // Allow read/update if the user is the owner of either company involved in the contact.
+      // A user can read or update a contact if their company is part of the contact.
       allow read, update: if request.auth != null &&
-                          (get(/databases/$(database)/documents/companies/$(resource.data.companyAId)).data.ownerUid == request.auth.uid ||
-                           (resource.data.companyBId != null && get(/databases/$(database)/documents/companies/$(resource.data.companyBId)).data.ownerUid == request.auth.uid));
+                           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyAId ||
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyBId);
     }
   }
 }
