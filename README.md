@@ -41,6 +41,8 @@ This project uses Firebase for authentication and database services. You need to
 
 ⚠️ **Important**: If you see a message like "Firebase: Error (auth/invalid-api-key)", it means your environment variables are missing or incorrect. Please ensure your `.env.local` file is correctly configured.
 
+⚠️ **Important**: After modifying your `.env.local` file, you must restart your development server for the changes to be applied. In Firebase Studio, this means restarting the workspace.
+
 ## Firebase Security Rules
 
 This project includes Firestore security rules in the `firestore.rules` file. These rules are essential for protecting your data.
