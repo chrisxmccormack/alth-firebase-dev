@@ -16,7 +16,7 @@ import {
   deleteField,
 } from 'firebase/firestore';
 import { nanoid } from 'nanoid';
-import type { Company, Contact } from '@/types';
+import type { Company, Contact, UserData } from '@/types';
 
 export async function generateInviteLink(
   companyId: string,
@@ -116,6 +116,7 @@ export async function acceptInvite(
 
 export async function createDirectContact(
     currentCompanyId: string,
+    currentUserId: string,
     formData: {
       name: string;
       addressLine1: string;
@@ -131,10 +132,18 @@ export async function createDirectContact(
     },
     relationship: { buyer: boolean; seller: boolean }
   ): Promise<{ success: boolean; error?: string }> {
-    if (!currentCompanyId) {
+    if (!currentCompanyId || !currentUserId) {
         return { success: false, error: "Current user's company could not be identified." };
     }
     try {
+      // Fetch the current user's data to ensure we have the correct names.
+      const userDocRef = doc(firestore!, "users", currentUserId);
+      const userDoc = await getDoc(userDocRef);
+      if (!userDoc.exists()) {
+        return { success: false, error: "Could not find current user." };
+      }
+      const currentUserData = userDoc.data() as UserData;
+
       const { contactEmail, firstName, lastName, ...companyData } = formData;
       const batch = writeBatch(firestore!);
   
@@ -147,8 +156,9 @@ export async function createDirectContact(
         createdAt: serverTimestamp(),
         ownerUid: null, // No owner, as this is a manually created contact
         ownerEmail: contactEmail,
-        ownerFirstName: firstName,
-        ownerLastName: lastName,
+        // Use form data for the new contact's name, but record who created it
+        ownerFirstName: currentUserData.firstName, 
+        ownerLastName: currentUserData.lastName,
       });
   
       // 2. Create the contact link
@@ -160,6 +170,12 @@ export async function createDirectContact(
         relationship,
         status: 'Connected',
         createdAt: serverTimestamp(),
+        // Add metadata about the new contact person
+        contactPerson: {
+            firstName: firstName,
+            lastName: lastName,
+            email: contactEmail
+        }
       });
   
       await batch.commit();

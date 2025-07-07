@@ -82,7 +82,7 @@ const countries = [
   ];
 
 export function InviteContactPanel({ onContactCreated }: CreateContactPanelProps) {
-  const { userData } = useAuth();
+  const { user, userData } = useAuth();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -106,7 +106,7 @@ export function InviteContactPanel({ onContactCreated }: CreateContactPanelProps
   });
 
   const onSubmit = async (data: CreateContactFormValues) => {
-    if (!userData?.companyId) {
+    if (!userData?.companyId || !user?.uid) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -119,6 +119,7 @@ export function InviteContactPanel({ onContactCreated }: CreateContactPanelProps
         const { isBuyer, isSeller, ...companyAndContactData } = data;
       const result = await createDirectContact(
         userData.companyId,
+        user.uid,
         companyAndContactData,
         { buyer: isBuyer, seller: isSeller }
       );

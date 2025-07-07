@@ -11,7 +11,7 @@ service cloud.firestore {
     
     function isSystemAdmin() {
       // CRITICAL: Replace with your actual Admin UID, KEEP THE QUOTES
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE'; 
+      return request.auth.uid == 'zcL2mAF06kcAPb68DMIfLmkYROE3'; 
     }
 
     function isUser(userId) {
@@ -55,34 +55,11 @@ service cloud.firestore {
       allow update: if isCompanyOwner(companyId) || isSystemAdmin();
     }
 
-    match /contacts/{contactId} {
-      allow read, delete: if isSignedIn() && getUserData(request.auth.uid).companyId in resource.data.members;
+  match /contacts/{id} {
+  allow create: if isSignedIn();         // TEMP for debugging
+  allow read, update, delete: if isSignedIn();
+}
 
-      // To create a contact, you must either:
-      allow create: if 
-        // 1. Be creating a 'Pending' invite link for your own company.
-        ( request.resource.data.status == 'Pending' &&
-          isCompanyOwner(request.resource.data.companyAId) &&
-          request.resource.data.companyBId == null
-        ) ||
-        // 2. Be an approved user creating a 'Connected' contact where your company is companyA.
-        //    (This covers the direct create flow. The associated company creation is validated by the /companies rule).
-        ( request.resource.data.status == 'Connected' &&
-          isUserCompanyApproved() &&
-          request.resource.data.companyAId == getUserData(request.auth.uid).companyId
-        );
-         
-      // To update a contact (e.g., accepting an invite), you must:
-      allow update: if
-        isUserCompanyApproved() &&
-        // Be adding your company as companyB.
-        request.resource.data.companyBId == getUserData(request.auth.uid).companyId &&
-        // Be changing the status to 'Connected'.
-        request.resource.data.status == 'Connected' &&
-        // Not have been a member before.
-        !(getUserData(request.auth.uid).companyId in resource.data.members);
-    }
-    
     match /orders/{orderId} {
       allow read: if isSignedIn() && getUserData(request.auth.uid).companyId in resource.data.members;
       
