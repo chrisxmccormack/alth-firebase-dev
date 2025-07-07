@@ -1,94 +1,84 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // --- Helper Functions ---
+
+    // =================================
+    // Helper Functions
+    // =================================
+
+    function isSystemAdmin() {
+      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with the actual UID from your Firebase project.
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    }
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isMe(userId) {
+    function isMyUserDocument(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-
-    function isSystemAdmin() {
-      // IMPORTANT: Replace this placeholder with your actual Admin User ID
-      return isMe('YOUR_ADMIN_UID_HERE');
-    }
-
-    // Safely gets the companyId from the user's document.
-    // Returns null if the user doc or companyId doesn't exist.
-    function getMyCompanyId() {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      if (userDoc == null || !('companyId' in userDoc.data)) {
-        return null;
-      }
-      return userDoc.data.companyId;
-    }
-
-    // Checks if the current user's company is a member of the document.
-    function amIMember(docData) {
-      let myCompany = getMyCompanyId();
-      // A user must have a company, and that companyId must be in the members list.
-      return myCompany != null && 'members' in docData && docData.members is list && myCompany in docData.members;
-    }
     
-    // --- Rules Definitions ---
+    function getUserCompanyId(uid) {
+        // This function returns the companyId from a user's document.
+        // It's designed to be used in rules that will fail gracefully if the path doesn't exist.
+        return get(/databases/$(database)/documents/users/$(uid)).data.companyId;
+    }
+
+    function isMemberOf(doc) {
+      // This function checks if the currently authenticated user's company
+      // is listed in the 'members' array of a given document (e.g., an order or contact).
+      // It will safely return false if the user document or companyId does not exist.
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userDoc.exists &&
+             'companyId' in userDoc.data &&
+             userDoc.data.companyId in doc.data.members;
+    }
+
+    // =================================
+    // Collection Rules
+    // =================================
 
     match /users/{userId} {
-      // Users can read and write their own user document.
-      allow read, write: if isMe(userId);
+      // A user can create, read, and write to their own user document.
+      allow read, write: if isMyUserDocument(userId);
     }
 
     match /companies/{companyId} {
-      // Any signed-in user can read company profiles (for contact lists, etc.)
+      // Anyone signed in can read basic company info (needed for invites/lookups).
       allow read: if isSignedIn();
-      // A user can create a company document only if they are the owner.
-      allow create: if isMe(request.resource.data.ownerUid);
-      // The system admin can approve companies. Owners cannot change status.
-      allow update: if isSystemAdmin() || 
-                     (isMe(resource.data.ownerUid) && request.resource.data.status == resource.data.status);
+
+      // A user can create a company document for themselves.
+      allow create: if request.auth.uid == request.resource.data.ownerUid
+                      && request.resource.data.status == 'Pending';
+
+      // An owner can update their company, but NOT the status. The admin can update anything.
+      allow update: if (request.auth.uid == resource.data.ownerUid && request.resource.data.status == resource.data.status)
+                    || isSystemAdmin();
     }
-    
+
     match /contacts/{contactId} {
-       // Users can read/update a contact if their company is a member.
-       allow read, update: if amIMember(resource.data);
-       // A user can create a contact, listing their own company as companyA.
-       allow create: if getMyCompanyId() == request.resource.data.companyAId;
+      // Allow read if user is a member of the contact or is an admin.
+      allow read: if isMemberOf(resource) || isSystemAdmin();
+
+      // Allow creating a contact if you are companyA.
+      allow create: if request.resource.data.companyAId == getUserCompanyId(request.auth.uid);
+
+      // Allow companyB to accept the invite, or admin to update.
+      allow update: if (request.resource.data.companyBId == getUserCompanyId(request.auth.uid)) || isSystemAdmin();
     }
 
     match /orders/{orderId} {
-      // Users can read an order if their company is a member. Admins can read all orders.
-      allow read: if amIMember(resource.data) || isSystemAdmin();
-      
-      // A user can create an order only if they are the seller.
-      allow create: if getMyCompanyId() == request.resource.data.sellerCompanyId;
+      // Allow read if user's company is a member of the order or is an admin.
+      allow read: if isMemberOf(resource) || isSystemAdmin();
 
-      // --- Granular Update Logic ---
-      function isSeller() {
-        return getMyCompanyId() == resource.data.sellerCompanyId;
-      }
+      // Allow creating an order if you are the seller.
+      allow create: if request.resource.data.sellerCompanyId == getUserCompanyId(request.auth.uid);
 
-      function isBuyer() {
-        return getMyCompanyId() == resource.data.buyerCompanyId;
-      }
-
-      function validSellerUpdate() {
-        return request.resource.data.status in ['Paid', 'Dispatched'] ||
-               (request.resource.data.status == 'Cancelled' && resource.data.status in ['Draft', 'Agreed']);
-      }
-
-      function validBuyerUpdate() {
-        return (request.resource.data.status == 'Agreed' && resource.data.status == 'Draft') ||
-               (request.resource.data.status == 'Delivered' && resource.data.status == 'Dispatched') ||
-               (request.resource.data.status == 'Disputed' && resource.data.status == 'Delivered');
-      }
-
-      allow update: if (isSeller() && validSellerUpdate()) ||
-                       (isBuyer() && validBuyerUpdate())  ||
-                       isSystemAdmin();
+      // Allow updates only by members of the order or admins.
+      // The server-side actions are responsible for validating the specific status transitions.
+      allow update: if isMemberOf(resource) || isSystemAdmin();
     }
   }
 }
