@@ -34,12 +34,14 @@ export default function Loading() {
                 <TableHead><Skeleton className="h-5 w-24" /></TableHead>
                 <TableHead><Skeleton className="h-5 w-24" /></TableHead>
                 <TableHead><Skeleton className="h-5 w-24" /></TableHead>
+                <TableHead><Skeleton className="h-5 w-24" /></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {[...Array(3)].map((_, i) => (
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-6 w-28 rounded-full" /></TableCell>
                   <TableCell><Skeleton className="h-6 w-28 rounded-full" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-20" /></TableCell>

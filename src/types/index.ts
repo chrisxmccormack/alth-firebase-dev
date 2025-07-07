@@ -34,6 +34,8 @@ export interface Company {
   ownerLastName?: string;
 }
 
+export type ContactStatus = "Pending" | "Connected" | "Unverified";
+
 export interface Contact {
   id: string;
   companyAId: string;
@@ -43,7 +45,7 @@ export interface Contact {
     buyer: boolean;
     seller: boolean;
   };
-  status: "Pending" | "Connected";
+  status: ContactStatus;
   inviteToken?: string;
   expiresAt?: Timestamp;
   createdAt: Timestamp;
@@ -52,11 +54,21 @@ export interface Contact {
     lastName: string;
     email: string;
   };
+  partnerCompanyDetails?: {
+    name: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    postcode: string;
+    country: string;
+    vatId?: string;
+    website?: string;
+  };
 }
 
 export interface PopulatedContact {
   id: string;
-  status: "Pending" | "Connected";
+  status: ContactStatus;
   relationship: {
     buyer: boolean;
     seller: boolean;

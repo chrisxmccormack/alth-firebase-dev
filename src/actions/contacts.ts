@@ -132,53 +132,32 @@ export async function createDirectContact(
     },
     relationship: { buyer: boolean; seller: boolean }
   ): Promise<{ success: boolean; error?: string }> {
-    if (!currentCompanyId || !currentUserId) {
+    if (!currentCompanyId) {
         return { success: false, error: "Current user's company could not be identified." };
     }
     try {
-      // Fetch the current user's data to ensure we have the correct names.
-      const userDocRef = doc(firestore!, "users", currentUserId);
-      const userDoc = await getDoc(userDocRef);
-      if (!userDoc.exists()) {
-        return { success: false, error: "Could not find current user." };
-      }
-      const currentUserData = userDoc.data() as UserData;
-
       const { contactEmail, firstName, lastName, ...companyData } = formData;
-      const batch = writeBatch(firestore!);
   
-      // 1. Create the new company
-      const newCompanyRef = doc(collection(firestore!, 'companies'));
-      batch.set(newCompanyRef, {
-        ...companyData,
-        logoUrl: '', // No logo upload in this flow
-        status: 'Approved', // Manually created contacts are pre-approved
-        createdAt: serverTimestamp(),
-        ownerUid: null, // No owner, as this is a manually created contact
-        ownerEmail: contactEmail,
-        // Use form data for the new contact's name, but record who created it
-        ownerFirstName: currentUserData.firstName, 
-        ownerLastName: currentUserData.lastName,
-      });
-  
-      // 2. Create the contact link
-      const contactRef = doc(collection(firestore!, 'contacts'));
-      batch.set(contactRef, {
+      // Create a single contact document with status "Unverified"
+      const newContactData = {
         companyAId: currentCompanyId,
-        companyBId: newCompanyRef.id,
-        members: [currentCompanyId, newCompanyRef.id],
+        companyBId: null,
+        members: [currentCompanyId],
         relationship,
-        status: 'Connected',
+        status: 'Unverified',
         createdAt: serverTimestamp(),
-        // Add metadata about the new contact person
+        // Embed the partner's company details
+        partnerCompanyDetails: companyData,
+        // Embed the contact person's details
         contactPerson: {
-            firstName: firstName,
-            lastName: lastName,
+            firstName,
+            lastName,
             email: contactEmail
         }
-      });
+      };
+
+      await addDoc(collection(firestore!, 'contacts'), newContactData);
   
-      await batch.commit();
       return { success: true };
     } catch (error: any) {
       console.error('Error creating direct contact:', error);
