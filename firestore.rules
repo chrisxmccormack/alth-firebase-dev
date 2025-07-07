@@ -4,76 +4,112 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- HELPER FUNCTIONS ---
-
-    // Check if a user is authenticated.
+    // --- UTILITY FUNCTIONS ---
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Check if the user is the designated System Administrator.
     function isSystemAdmin() {
-      // CRITICAL: Replace with your actual Admin UID, including the quotes.
-      return isSignedIn() && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
 
-    // Securely get the data of the currently authenticated user.
-    function getRequestingUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
     }
 
-    // Check if the currently authenticated user has been approved by an admin.
     function isApprovedUser() {
-      // Use .get() to safely check for the field, defaulting to false if it doesn't exist.
-      return isSignedIn() && getRequestingUserData().get('companyIsApproved', false) == true;
+      let userData = getUserData(request.auth.uid);
+      return userData.companyIsApproved == true;
     }
 
-    // --- COLLECTION RULES ---
-
+    // --- USERS ---
     match /users/{userId} {
-      // A user document is created automatically on sign-up.
-      allow create: if isSignedIn();
+      // Users can create their own user document on signup
+      allow create: if isSignedIn() && request.auth.uid == userId;
 
-      // Users can read their own data. Admins can read anyone's data.
-      allow read: if isSystemAdmin() || (isSignedIn() && request.auth.uid == userId);
-
-      // An admin can update the `companyIsApproved` flag.
-      // A user can update their `companyId` during the one-time company setup.
-      allow update: if (isSystemAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyIsApproved'])) ||
-                       (isSignedIn() && request.auth.uid == userId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyId']));
-
-      allow delete: if false;
+      // Users can only read/update their own data
+      // This is also required for the rules functions to be able to read user data.
+      allow read, update: if isSignedIn() && request.auth.uid == userId;
     }
 
+    // --- COMPANIES ---
     match /companies/{companyId} {
-      // A user can create their OWN company, but only if they don't already have one.
-      // The new company's owner must be the user creating it.
-      allow create: if isSignedIn() &&
-                       getRequestingUserData().companyId == null &&
-                       request.resource.data.ownerUid == request.auth.uid;
+      // An approved user or an admin can read any company profile.
+      allow read: if isApprovedUser() || isSystemAdmin();
 
-      // Only the system admin or the owner of the company can read its details.
-      allow read: if isSystemAdmin() || (isSignedIn() && request.auth.uid == resource.data.ownerUid);
+      // Only the System Admin can approve or modify companies.
+      allow update: if isSystemAdmin();
 
-      // Only the system admin can update a company's status (for approval).
-      allow update: if isSystemAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
-
-      allow delete: if false;
+      // A user can create a company for themselves, but it starts as 'Pending'.
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid && request.resource.data.status == 'Pending';
     }
 
+    // --- CONTACTS ---
     match /contacts/{contactId} {
-      // An approved user can create a contact.
-      allow create: if isApprovedUser();
+      // Anyone who is a member of the contact can read it.
+      allow read: if isSignedIn() && getUserData(request.auth.uid).companyId in resource.data.members;
 
-      // A user can read a contact document if their company is listed as a member.
-      allow read: if isSignedIn() && getRequestingUserData().companyId in resource.data.members;
+      // --- CREATE RULES ---
+      // For creating an 'Unverified' contact, user only needs to be signed in.
+      // For creating a 'Pending' contact (invite link), user must be approved.
+      allow create: if isSignedIn() && 
+                      (
+                        (
+                          request.resource.data.status == 'Unverified' &&
+                          request.resource.data.companyAId == getUserData(request.auth.uid).companyId
+                        ) ||
+                        (
+                          request.resource.data.status == 'Pending' &&
+                          request.resource.data.companyAId == getUserData(request.auth.uid).companyId &&
+                          isApprovedUser()
+                        )
+                      );
 
-      // An approved user can update a contact to accept an invite.
-      // This rule is permissive on fields to allow for invite acceptance logic.
+
+      // --- UPDATE RULES ---
+      // Only for accepting an invite. The user must be approved.
+      // Status must change from 'Pending' to 'Connected'.
       allow update: if isApprovedUser() &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'companyBId', 'members', 'inviteToken', 'expiresAt']);
+                      request.resource.data.companyBId == getUserData(request.auth.uid).companyId &&
+                      resource.data.status == 'Pending' &&
+                      request.resource.data.status == 'Connected';
+    }
 
-      allow delete: if false;
+    // --- ORDERS ---
+    match /orders/{orderId} {
+        // Members of an order can read it.
+        allow read: if isApprovedUser() && getUserData(request.auth.uid).companyId in resource.data.members;
+
+        // An approved seller can create a draft order.
+        allow create: if isApprovedUser() &&
+                        request.resource.data.sellerCompanyId == getUserData(request.auth.uid).companyId &&
+                        request.resource.data.status == 'Draft';
+
+        // Complex update logic handled by a helper function.
+        allow update: if isApprovedUser() && canUpdateOrder(request, resource);
+    }
+
+    function canUpdateOrder(request, resource) {
+        let newStatus = request.resource.data.status;
+        let oldStatus = resource.data.status;
+        let userCompanyId = getUserData(request.auth.uid).companyId;
+        let isBuyer = resource.data.buyerCompanyId == userCompanyId;
+        let isSeller = resource.data.sellerCompanyId == userCompanyId;
+
+        return (
+            // Buyer can agree to a draft
+            (isBuyer && oldStatus == 'Draft' && newStatus == 'Agreed') ||
+            // Seller can mark as paid
+            (isSeller && oldStatus == 'Agreed' && newStatus == 'Paid') ||
+            // Seller can mark as dispatched
+            (isSeller && oldStatus == 'Paid' && newStatus == 'Dispatched') ||
+            // Buyer can mark as delivered
+            (isBuyer && oldStatus == 'Dispatched' && newStatus == 'Delivered') ||
+            // Buyer can dispute a delivered escrow order
+            (isBuyer && oldStatus == 'Delivered' && resource.data.paymentMethod == 'Escrow' && newStatus == 'Disputed') ||
+            // Seller can cancel a draft or agreed order
+            (isSeller && (oldStatus == 'Draft' || oldStatus == 'Agreed') && newStatus == 'Cancelled')
+        );
     }
   }
 }
