@@ -12,7 +12,7 @@ service cloud.firestore {
     // NOTE: Make sure to replace 'YOUR_ADMIN_UID_HERE' below
     // with the actual Firebase UID of your system administrator.
     function isSystemAdmin() {
-      return isSignedIn() && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+      return isSignedIn() && request.auth.uid == 'zcL2mAF06kcAPb68DMIfLmkYROE3';
     }
 
     // This function safely retrieves the company ID for the currently
