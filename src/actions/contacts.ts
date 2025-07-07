@@ -30,6 +30,7 @@ export async function generateInviteLink(
   const newContactData = {
     companyAId: companyId,
     companyBId: null,
+    members: [companyId],
     relationship,
     status: 'Pending',
     inviteToken,
@@ -100,6 +101,7 @@ export async function acceptInvite(
     batch.update(contactRef, {
       companyBId: acceptingCompanyId,
       status: 'Connected',
+      members: [contact.companyAId, acceptingCompanyId],
       inviteToken: deleteField(),
       expiresAt: deleteField(),
     });
@@ -151,6 +153,7 @@ export async function createDirectContact(
       batch.set(contactRef, {
         companyAId: currentCompanyId,
         companyBId: newCompanyRef.id,
+        members: [currentCompanyId, newCompanyRef.id],
         relationship,
         status: 'Connected',
         createdAt: serverTimestamp(),

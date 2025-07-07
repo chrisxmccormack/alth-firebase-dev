@@ -59,6 +59,7 @@ export async function createOrder(
     const newOrderData = {
       ...formData,
       sellerCompanyId,
+      members: [sellerCompanyId, formData.buyerCompanyId],
       totals,
       platformFeePct,
       status: 'Draft',

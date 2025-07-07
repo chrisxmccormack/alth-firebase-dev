@@ -35,14 +35,17 @@ export default function BuyingPage() {
 
     const q = query(
       collection(firestore!, "orders"),
-      where("buyerCompanyId", "==", companyId),
+      where("members", "array-contains", companyId),
       orderBy("createdAt", "desc")
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const fetchedOrders = snapshot.docs.map(
+      const allMemberOrders = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as PopulatedOrder)
       );
+
+      // Filter for orders where the user is the buyer
+      const fetchedOrders = allMemberOrders.filter(o => o.buyerCompanyId === companyId);
 
       const sellerCompanyIds = [
         ...new Set(fetchedOrders.map((o) => o.sellerCompanyId)),

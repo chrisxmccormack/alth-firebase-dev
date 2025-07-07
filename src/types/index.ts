@@ -1,4 +1,3 @@
-
 import type { Timestamp } from "firebase/firestore";
 
 export interface UserData {
@@ -37,6 +36,7 @@ export interface Contact {
   id: string;
   companyAId: string;
   companyBId: string | null;
+  members: string[];
   relationship: {
     buyer: boolean;
     seller: boolean;
@@ -92,6 +92,7 @@ export interface Order {
   id: string;
   sellerCompanyId: string;
   buyerCompanyId: string;
+  members: string[];
   currency: Currency;
   paymentMethod: PaymentMethod;
   platformFeePct: number;

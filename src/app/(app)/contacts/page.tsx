@@ -68,26 +68,12 @@ export default function ContactsPage() {
     const q = query(
       collection(firestore!, "contacts"),
       where("status", "==", "Connected"),
-      where("companyAId", "==", companyId)
+      where("members", "array-contains", companyId)
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const allContacts = snapshot.docs.map(
+      const userContacts = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as Contact)
-      );
-
-      const q2 = query(
-        collection(firestore!, "contacts"),
-        where("status", "==", "Connected"),
-        where("companyBId", "==", companyId),
-      );
-      const snapshot2 = await getDocs(q2);
-      const contactsAsB = snapshot2.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() } as Contact)
-      );
-      
-      const userContacts = [...allContacts, ...contactsAsB].filter(
-          c => c.companyAId === companyId || c.companyBId === companyId
       );
 
       const partnerCompanyIds = userContacts

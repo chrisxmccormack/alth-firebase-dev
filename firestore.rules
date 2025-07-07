@@ -1,95 +1,117 @@
 rules_version = '2';
+
 service cloud.firestore {
-  match /databases/{db}/documents {
-
-    // --- Helper Functions ---
-    // These functions can be used across different rule matches.
-
-    function isSignedIn() {
+  match /databases/{database}/documents {
+    
+    // ============== Helper Functions ==============
+    function isAuth() {
       return request.auth != null;
     }
 
-    // NOTE: Make sure to replace 'YOUR_ADMIN_UID_HERE' below
-    // with the actual Firebase UID of your system administrator.
-    function isSystemAdmin() {
-      return isSignedIn() && request.auth.uid == 'zcL2mAF06kcAPb68DMIfLmkYROE3';
-    }
-
-    // This function safely retrieves the company ID for the currently
-    // authenticated user from the /users collection.
-    function getMyCompanyId() {
-      return get(/databases/$(db)/documents/users/$(request.auth.uid)).data.companyId;
-    }
-
-    // --- Rules for Collections ---
-
-    match /users/{userId} {
-      // Users can create their own user document upon signup.
-      allow create: if request.auth.uid == userId;
-
-      // Users can read or update their own data. Admins can read/update anyone.
-      allow read, update: if request.auth.uid == userId || isSystemAdmin();
-    }
-
-    match /companies/{companyId} {
-      // Any signed-in user can view company profiles (e.g., for lookups).
-      allow read: if isSignedIn();
-
-      // A user can create a company if they are listed as the owner in the new document.
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
-      
-      // Only the company owner or a system admin can update a company profile.
-      // This is used for both profile edits and admin approvals.
-      allow update: if (get(/databases/$(db)/documents/companies/$(companyId)).data.ownerUid == request.auth.uid) || isSystemAdmin();
+    function uid() {
+      return request.auth.uid;
     }
     
-    match /contacts/{contactId} {
-      // A user can read a contact document if their company is either companyA or companyB.
-      allow read: if isSignedIn() && (
-        resource.data.companyAId == getMyCompanyId() ||
-        resource.data.companyBId == getMyCompanyId()
-      );
-
-      // A user can create an invite if their company is listed as companyA.
-      allow create: if isSignedIn() && request.resource.data.companyAId == getMyCompanyId();
-
-      // An invited user (companyB) can update the contact to accept the invitation.
-      // The system admin can also update contacts.
-      // We restrict the fields a user can change to prevent them from altering companyA, etc.
-      allow update: if (isSignedIn() && 
-                       request.resource.data.companyBId == getMyCompanyId() &&
-                       request.resource.data.companyAId == resource.data.companyAId &&
-                       request.resource.data.status == 'Connected'
-                      ) || isSystemAdmin();
+    // IMPORTANT: Replace UID during deployment!
+    function isSystemAdmin() {
+      return uid() == 'YOUR_ADMIN_UID_HERE'; 
     }
 
+    // Retrieves the user's document data from the /users collection
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(uid())).data;
+    }
+    
+    // Gets the companyId associated with the current user
+    function myCompanyId() {
+      return getUserDoc().companyId;
+    }
+    
+    // Checks if the user is the owner of a specific company
+    function isOwner(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId)).data.ownerUid == uid();
+    }
+    
+    // Checks if a company is approved
+    function isCompanyApproved(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId)).data.status == 'Approved';
+    }
+
+    // ============== User Profiles ==============
+    match /users/{userId} {
+      allow read, write: if isAuth() && userId == uid();
+    }
+
+    // ============== Company Profiles ==============
+    match /companies/{companyId} {
+      // Read: Any authenticated user with an approved company, or admin.
+      allow read: if isSystemAdmin() || (isAuth() && isCompanyApproved(myCompanyId()));
+      
+      // Create: Any authenticated user without a company yet.
+      allow create: if isAuth() && myCompanyId() == null;
+      
+      // Update: The owner of the company, or the system admin.
+      allow update: if isAuth() && (isOwner(companyId) || isSystemAdmin());
+    }
+    
+    // ============== Contacts ==============
+    match /contacts/{contactId} {
+      let doc = resource.data;
+      let requestDoc = request.resource.data;
+
+      // Read: Can read a contact if your company is a member.
+      // This works for both GET and LIST (with array-contains query).
+      allow read: if isAuth() && myCompanyId() in doc.members;
+      
+      // Create: Can create invites/contacts for your own approved company.
+      allow create: if isAuth() && 
+                     isCompanyApproved(myCompanyId()) &&
+                     requestDoc.companyAId == myCompanyId() &&
+                     myCompanyId() in requestDoc.members;
+
+      // Update: Only to accept a pending invite.
+      allow update: if isAuth() &&
+                     isCompanyApproved(myCompanyId()) &&
+                     doc.status == 'Pending' &&
+                     requestDoc.status == 'Connected' &&
+                     requestDoc.companyBId == myCompanyId() &&
+                     myCompanyId() in requestDoc.members;
+    }
+    
+    // ============== Orders ==============
     match /orders/{orderId} {
-      // --- Order-specific helper functions ---
-      function isSeller() {
-        return resource.data.sellerCompanyId == getMyCompanyId();
-      }
-      function isBuyer() {
-        return resource.data.buyerCompanyId == getMyCompanyId();
-      }
-      function incomingData() {
-        return request.resource.data;
-      }
-      // --- End Order-specific functions ---
+      let doc = resource.data;
+      let requestDoc = request.resource.data;
 
-      allow read: if isSignedIn() && (isSeller() || isBuyer() || isSystemAdmin());
+      // Read: Can read an order if your company is a member.
+      // This works for both GET and LIST (with array-contains query).
+      allow read: if isAuth() && myCompanyId() in doc.members;
+      
+      // Create: Only sellers from an approved company can create orders.
+      allow create: if isAuth() && 
+                       isCompanyApproved(myCompanyId()) &&
+                       requestDoc.sellerCompanyId == myCompanyId() &&
+                       myCompanyId() in requestDoc.members;
+                       
+      // Update: Logic is delegated to helper functions.
+      allow update: if isAuth() && isCompanyApproved(myCompanyId()) &&
+                     ( (doc.sellerCompanyId == myCompanyId() && validSellerUpdate(doc, requestDoc)) ||
+                       (doc.buyerCompanyId == myCompanyId()  && validBuyerUpdate(doc, requestDoc))  ||
+                       isSystemAdmin() );
+    }
 
-      // Only the seller can create an order.
-      allow create: if isSignedIn() && incomingData().sellerCompanyId == getMyCompanyId();
-
-      // Update permissions are based on the user's role (seller/buyer) and the
-      // status transition they are trying to make.
-      allow update: if isSignedIn() && (
-        isSystemAdmin() ||
-        // Seller actions
-        (isSeller() && incomingData().status in ['Paid', 'Dispatched', 'Cancelled']) ||
-        // Buyer actions
-        (isBuyer() && incomingData().status in ['Agreed', 'Delivered', 'Disputed', 'InQuery'])
-      );
+    // Helper for validating seller-initiated status changes
+    function validSellerUpdate(doc, requestDoc) {
+      return (doc.status == 'Agreed' && requestDoc.status == 'Paid') ||
+             (doc.status == 'Paid' && requestDoc.status == 'Dispatched') ||
+             (doc.status in ['Draft', 'Agreed'] && requestDoc.status == 'Cancelled');
+    }
+    
+    // Helper for validating buyer-initiated status changes
+    function validBuyerUpdate(doc, requestDoc) {
+      return (doc.status == 'Draft' && requestDoc.status == 'Agreed') ||
+             (doc.status == 'Dispatched' && requestDoc.status == 'Delivered') ||
+             (doc.status == 'Delivered' && requestDoc.status in ['Disputed', 'InQuery']);
     }
   }
 }
