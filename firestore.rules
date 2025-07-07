@@ -1,164 +1,105 @@
-
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{db}/documents {
 
-    // Helper Functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
+    // --- Helper Functions ---
     function isSystemAdmin() {
-      // Use the get() function on an environment variable for security
-      // Note: You must set this in your functions/backend environment
-      // This placeholder is for local testing with the emulator.
-      // return request.auth.uid == get(/databases/$(db)/documents/config/admin).data.uid;
+      // IMPORTANT: Replace with your actual UID before deploying
       return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
 
-    function getUserDoc(uid) {
-      return get(/databases/$(db)/documents/users/$(uid));
-    }
-
-    function hasCompany(uid) {
-      return getUserDoc(uid).data.companyId != null;
+    function isSignedIn() {
+      return request.auth != null;
     }
     
-    function getCompanyId(uid) {
-      return getUserDoc(uid).data.companyId;
+    // This function returns the user's document from the /users collection
+    function userDoc() {
+      return get(/databases/$(db)/documents/users/$(request.auth.uid));
+    }
+    
+    // This function returns the user's company ID, but only if the user doc and companyId exist
+    function userCompanyId() {
+      return userDoc().data.companyId;
     }
 
-    // --- User Rules ---
+    // This function checks if the user has a company associated with them
+    function userHasCompany() {
+      return exists(/databases/$(db)/documents/users/$(request.auth.uid)) && userDoc().data.companyId != null;
+    }
+
+    // --- Collection Rules ---
+
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isSystemAdmin());
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && request.auth.uid == userId;
+      // Users can read, create, and update their own user document.
+      allow read, create, update: if isSignedIn() && request.auth.uid == userId;
     }
 
-    // --- Company Rules ---
-    function isCreatingOwnCompany() {
-      // Allows a new user (without a companyId yet) to create a company for themselves.
-      return isSignedIn() &&
-             request.resource.data.ownerUid == request.auth.uid &&
-             hasCompany(request.auth.uid) == false;
-    }
-
-    function isCreatingContactCompany() {
-      // Allows a user who *already has* a company to create a new "stub" company for a contact.
-      return isSignedIn() &&
-             hasCompany(request.auth.uid) == true &&
-             request.resource.data.ownerUid == null;
-    }
-
-    function isOwnerOfCompany(companyId) {
-      let companyDoc = get(/databases/$(db)/documents/companies/$(companyId));
-      return isSignedIn() && companyDoc.data.ownerUid == request.auth.uid;
-    }
-    
     match /companies/{companyId} {
+      // Any signed-in user can read company data. This is needed for populating partner info.
       allow read: if isSignedIn();
-      allow create: if isCreatingOwnCompany() || isCreatingContactCompany();
-      allow update: if isOwnerOfCompany(companyId) || isSystemAdmin();
-    }
 
-    // --- Contact Rules ---
-    function isCreatingValidInvite() {
-      let requestData = request.resource.data;
-      return isSignedIn() &&
-             requestData.status == 'Pending' &&
-             requestData.companyAId == getCompanyId(request.auth.uid) &&
-             requestData.companyBId == null;
-    }
-
-    function isCreatingValidDirectContact() {
-        let requestData = request.resource.data;
-        return isSignedIn() &&
-            requestData.status == 'Connected' &&
-            requestData.companyAId == getCompanyId(request.auth.uid) &&
-            requestData.companyBId != null;
-    }
-
-    function isAcceptingInvite(contactId) {
-        let existingContact = get(/databases/$(db)/documents/contacts/$(contactId)).data;
-        let incomingData = request.resource.data;
-        let myCompanyId = getCompanyId(request.auth.uid);
-
-        return isSignedIn() &&
-            hasCompany(request.auth.uid) &&
-            existingContact.status == 'Pending' &&
-            incomingData.status == 'Connected' &&
-            incomingData.companyBId == myCompanyId &&
-            existingContact.companyAId != myCompanyId; // Can't accept own invite
+      // Allow creating a company if:
+      // 1. You are the owner of the new company being created.
+      // 2. You already have a company and are creating an ownerless company (for the 'Add Contact' feature).
+      allow create: if isSignedIn() && 
+        (request.resource.data.ownerUid == request.auth.uid || 
+         (request.resource.data.ownerUid == null && userHasCompany()));
+      
+      // Only the System Admin can update a company (e.g., to approve it).
+      allow update: if isSystemAdmin();
     }
 
     match /contacts/{contactId} {
-      allow read: if isSignedIn() && getCompanyId(request.auth.uid) in resource.data.members;
-      allow create: if isCreatingValidInvite() || isCreatingValidDirectContact();
-      allow update: if isAcceptingInvite(contactId);
-    }
+      // Allow read if the user's company is in the 'members' array.
+      allow read: if userHasCompany() && userCompanyId() in resource.data.members;
 
-    // --- Order Rules ---
-    function isPartyToOrder() {
-      return isSignedIn() && getCompanyId(request.auth.uid) in resource.data.members;
-    }
-
-    function isValidOrderCreation() {
-      let data = request.resource.data;
-      let sellerCompanyId = getCompanyId(request.auth.uid);
-
-      return isSignedIn() &&
-             hasCompany(request.auth.uid) &&
-             data.sellerCompanyId == sellerCompanyId &&
-             sellerCompanyId in data.members &&
-             data.buyerCompanyId in data.members;
-    }
-    
-    function isValidOrderUpdate(existingOrder) {
-        let incomingData = request.resource.data;
-        let myCompanyId = getCompanyId(request.auth.uid);
-        let isSeller = myCompanyId == existingOrder.sellerCompanyId;
-        let isBuyer = myCompanyId == existingOrder.buyerCompanyId;
-
-        let validSellerTransitions = {
-            "Draft": ["Agreed", "Cancelled"],
-            "Agreed": ["Paid", "Cancelled"], // "Paid" is manual for now but rule allows it
-            "Paid": ["Dispatched"],
-            "Delivered": ["Completed"] // Auto-completed by function but rule allows manual
-        };
-
-        let validBuyerTransitions = {
-            "Draft": ["Agreed"],
-            "Dispatched": ["Delivered"],
-            "Delivered": ["Disputed", "InQuery"]
-        };
-
-        let currentStatus = existingOrder.status;
-        let nextStatus = incomingData.status;
-
-        // Allow status update if it's a valid transition for the user's role
-        if (currentStatus != nextStatus) {
-            if (isSeller && nextStatus in validSellerTransitions[currentStatus]) {
-                return true;
-            }
-            if (isBuyer && nextStatus in validBuyerTransitions[currentStatus]) {
-                return true;
-            }
-            return false; // Invalid status transition
-        }
-        
-        // Allow other field updates if status isn't changing (e.g., adding trackingId)
-        if (isSeller && currentStatus != 'Cancelled' && currentStatus != 'Completed') {
-            return true;
-        }
-
-        return false;
+      // Allow create if the user is creating the contact for their own company.
+      // This covers both invites and direct creation.
+      allow create: if userHasCompany() && request.resource.data.companyAId == userCompanyId();
+      
+      // Allow update only for accepting an invite. The user must be the invited party (companyB).
+      allow update: if userHasCompany() &&
+                       resource.data.status == 'Pending' &&
+                       request.resource.data.status == 'Connected' &&
+                       request.resource.data.companyBId == userCompanyId();
     }
 
     match /orders/{orderId} {
-      allow read: if isPartyToOrder() || isSystemAdmin();
-      allow create: if isValidOrderCreation();
-      allow update: if isPartyToOrder() && isValidOrderUpdate(resource.data);
+      // Allow read if the user's company is in the 'members' array.
+      allow read: if userHasCompany() && userCompanyId() in resource.data.members;
+
+      // Allow create if the user's company is the seller.
+      allow create: if userHasCompany() && request.resource.data.sellerCompanyId == userCompanyId();
+
+      // Allow updates based on role and valid status transitions.
+      allow update: if userHasCompany() && (
+        (userCompanyId() == resource.data.sellerCompanyId && isSellerOrderUpdate(request, resource)) ||
+        (userCompanyId() == resource.data.buyerCompanyId && isBuyerOrderUpdate(request, resource))
+      );
+    }
+    
+    // --- Order Update Logic Functions ---
+    
+    function isSellerOrderUpdate(request, resource) {
+      let oldStatus = resource.data.status;
+      let newStatus = request.resource.data.status;
+      return (oldStatus == 'Agreed' && newStatus == 'Paid') ||
+             (oldStatus == 'Paid' && newStatus == 'Dispatched') ||
+             (newStatus == 'Cancelled' && oldStatus in ['Draft', 'Agreed']);
+    }
+    
+    function isBuyerOrderUpdate(request, resource) {
+      let oldStatus = resource.data.status;
+      let newStatus = request.resource.data.status;
+      // Allow disputing an Escrow order within the deadline
+      let canDispute = resource.data.paymentMethod == 'Escrow' && 
+                       resource.data.escrowDeadline != null && 
+                       resource.data.escrowDeadline > request.time;
+                       
+      return (oldStatus == 'Draft' && newStatus == 'Agreed') ||
+             (oldStatus == 'Dispatched' && newStatus == 'Delivered') ||
+             (oldStatus == 'Delivered' && newStatus == 'Disputed' && canDispute) ||
+             (oldStatus == 'Delivered' && newStatus == 'InQuery');
     }
   }
 }
