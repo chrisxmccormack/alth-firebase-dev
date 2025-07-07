@@ -131,6 +131,9 @@ export async function createDirectContact(
     },
     relationship: { buyer: boolean; seller: boolean }
   ): Promise<{ success: boolean; error?: string }> {
+    if (!currentCompanyId) {
+        return { success: false, error: "Current user's company could not be identified." };
+    }
     try {
       const { contactEmail, firstName, lastName, ...companyData } = formData;
       const batch = writeBatch(firestore!);

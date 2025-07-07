@@ -5,7 +5,7 @@ service cloud.firestore {
     // --- Helper Functions ---
     function isSystemAdmin() {
       // IMPORTANT: Replace with your actual UID before deploying
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+      return request.auth.uid == 'zcL2mAF06kcAPb68DMIfLmkYROE3';
     }
 
     function isSignedIn() {
