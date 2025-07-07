@@ -1,80 +1,82 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- Helper Functions ---
+    
+    // Global helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isRequestingOwnData(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
     function getUserData() {
-      // Fetches the data for the currently authenticated user.
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-    
+
     function isUserApproved() {
-      // An approved user is one who is signed in, has a companyId, and that company is approved.
       let userData = getUserData();
-      return isSignedIn() &&
-             userData.companyId != null &&
-             get(/databases/$(database)/documents/companies/$(userData.companyId)).data.status == 'Approved';
+      if (!('companyId' in userData) || userData.companyId == null) {
+        return false;
+      }
+      let companyData = get(/databases/$(database)/documents/companies/$(userData.companyId)).data;
+      return companyData.status == 'Approved';
+    }
+    
+    function isSystemAdmin() {
+      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with your actual UID string.
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
 
-    function isAdmin() {
-      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with your actual System Admin UID.
-      return isSignedIn() && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    // Allow admins to read/write anything for easy management
+    match /{path=**} {
+      allow read, write: if isSystemAdmin();
     }
-
-    // --- Collection Rules ---
-
+    
+    // Rules for /users
     match /users/{userId} {
-      allow read: if isRequestingOwnData(userId) || isAdmin();
-      
-      // Allow user creation if the UID in the path matches the auth token.
-      allow create: if isRequestingOwnData(userId);
-
-      // Allow user to update their own profile, or an admin to update any profile.
-      allow update: if isRequestingOwnData(userId) || isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow read, update: if isSignedIn() && request.auth.uid == userId;
     }
 
+    // Rules for /companies
     match /companies/{companyId} {
-      // Any approved user or an admin can read company profiles.
-      allow read: if isUserApproved() || isAdmin();
+      allow read: if isSignedIn(); // Any signed-in user can read company profiles
 
-      // Any signed-in user can create a company (for themselves or a contact).
-      // The business logic is handled in the server action.
-      allow create: if isSignedIn();
-
-      // Only an admin can update a company (e.g., to approve it).
-      allow update: if isAdmin();
+      // An authenticated user can create their own company during setup.
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      
+      // Only the system admin can approve companies by updating the status.
+      allow update: if isSystemAdmin() && request.resource.data.keys().hasOnly(['status']);
     }
-    
+
+    // Rules for /contacts
     match /contacts/{contactId} {
-      // You can read a contact if your company is one of the members.
-      allow read: if isUserApproved() && getUserData().companyId in resource.data.members;
-
-      // Create a contact (for an invite link or direct creation).
-      // The user must be approved and creating a contact linked to their own company.
-      allow create: if isUserApproved() &&
-                       getUserData().companyId == request.resource.data.companyAId;
-                       
-      // Update a contact (typically for accepting an invite).
-      allow update: if isUserApproved() &&
-                       // When accepting, you must be adding your company as companyBId.
-                       getUserData().companyId == request.resource.data.companyBId &&
-                       // And your company ID must now be in the members list.
-                       getUserData().companyId in request.resource.data.members;
+      // Users can read contacts where their company is a member.
+      allow read: if isSignedIn() && isUserApproved() && getUserData().companyId in resource.data.members;
+      
+      // Creating an invite link.
+      // This is a single write to /contacts.
+      allow create: if isSignedIn() && isUserApproved() && request.resource.data.status == 'Pending' && getUserData().companyId == request.resource.data.companyAId;
+      
+      // Accepting an invite link.
+      // This is a single update to /contacts.
+      allow update: if isSignedIn() && isUserApproved() && resource.data.status == 'Pending' && request.resource.data.status == 'Connected' && getUserData().companyId == request.resource.data.companyBId;
     }
-    
+
+    // This block handles the specific batch write for "Create Direct Contact"
+    match /companies/{newCompanyId} {
+      // Allow creating a company if it's part of the direct contact flow (no owner)
+      allow create: if isSignedIn() && isUserApproved() && request.resource.data.ownerUid == null;
+    }
+    match /contacts/{newContactId} {
+      // Allow creating the associated contact link if the user is approved and a member.
+      allow create: if isSignedIn() && isUserApproved() && request.resource.data.status == 'Connected' && getUserData().companyId in request.resource.data.members;
+    }
+
+    // Rules for /orders
     match /orders/{orderId} {
-      // You can read or write an order if your company is one of the members.
-      allow read, write: if isUserApproved() &&
-                           getUserData().companyId in resource.data.members;
+      allow read: if isSignedIn() && isUserApproved() && getUserData().companyId in resource.data.members;
+      allow create, update: if isSignedIn() && isUserApproved() && getUserData().companyId in request.resource.data.members;
     }
   }
 }
