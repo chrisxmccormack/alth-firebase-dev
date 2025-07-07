@@ -1,85 +1,102 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // --- HELPER FUNCTIONS ---
-
-    function isSignedIn() {
+    // --- UTILITY FUNCTIONS (No GET calls here) ---
+    function isAuth() {
       return request.auth != null;
     }
 
-    function isSystemAdmin() {
-      // IMPORTANT: Replace with your actual Admin UID from .env.local
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE'; 
-    }
-    
-    function getUserData(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data;
+    function isAdmin() {
+      // !!! IMPORTANT !!! Replace with your actual Admin User ID from Firebase Auth
+      return isAuth() && request.auth.uid == 'YOUR_ADMIN_UID_HERE'; 
     }
 
-    function requestingUserDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-    
-    function requestingUserCompanyId() {
-      return requestingUserDoc().data.companyId;
-    }
-
-    function isRegisteredUser() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             requestingUserDoc().data.companyId != null;
-    }
-    
-    function isApprovedUser() {
-      let companyId = requestingUserCompanyId();
-      return isRegisteredUser() &&
-             exists(/databases/$(database)/documents/companies/$(companyId)) &&
-             get(/databases/$(database)/documents/companies/$(companyId)).data.status == 'Approved';
-    }
-
-
-    // --- COLLECTION RULES ---
-
+    // --- USERS ---
     match /users/{userId} {
-      allow read, update: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      // Users can create their own user document after signing up.
+      // They can read and update their own document.
+      allow read, update: if isAuth() && request.auth.uid == userId;
+      allow create: if isAuth() && request.auth.uid == userId; 
     }
 
+    // --- COMPANIES ---
     match /companies/{companyId} {
-      allow read: if isRegisteredUser();
+      // Define helper variables for this scope using 'let'. This is the correct pattern.
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let userHasCompany = 'companyId' in userDoc.data && userDoc.data.companyId != null;
+      let userCompanyId = userDoc.data.companyId;
 
-      // Allow create if user is signing up (owner matches) OR if an approved user is creating an ownerless contact.
-      allow create: if isSignedIn() && 
-                    ( (request.resource.data.ownerUid == request.auth.uid) ||
-                      (isApprovedUser() && request.resource.data.ownerUid == null) );
+      // READ: Any authenticated user with a company can read company details.
+      allow read: if isAuth() && userHasCompany;
 
-      // Only the System Admin can approve/update companies.
-      allow update: if isSystemAdmin();
+      // UPDATE: Only the system admin can update company status (e.g., for approval).
+      allow update: if isAdmin();
+      
+      // CREATE:
+      allow create: if isAuth() && (
+        // Case 1: A new user is creating their own company. 
+        // Their user doc has no companyId yet, and they are the owner.
+        (!userHasCompany && request.resource.data.ownerUid == request.auth.uid) ||
+        // Case 2: An existing, approved user is creating a partner company record.
+        // The new company has no owner, and the user's own company must be approved.
+        (
+          userHasCompany &&
+          request.resource.data.ownerUid == null &&
+          get(/databases/$(database)/documents/companies/$(userCompanyId)).data.status == 'Approved'
+        )
+      );
     }
     
+    // --- CONTACTS ---
     match /contacts/{contactId} {
-      // Allow read/update if the user is a member of the contact.
-      allow read, update: if isRegisteredUser() && requestingUserCompanyId() in resource.data.members;
+      // Define helper variables for this scope.
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let userHasCompany = 'companyId' in userDoc.data && userDoc.data.companyId != null;
+      let userCompanyId = userDoc.data.companyId;
 
-      // Allow creating a contact if the user is approved and the new contact data is valid.
-      // This rule does NOT check for the existence of companyBId, as it is created in the same transaction.
-      allow create: if isApprovedUser() &&
-                     request.resource.data.companyAId == requestingUserCompanyId() &&
-                     request.resource.data.companyBId != null &&
-                     requestingUserCompanyId() in request.resource.data.members &&
-                     request.resource.data.companyBId in request.resource.data.members;
+      // READ: User can read a contact if their company is one of the members.
+      allow read: if isAuth() && userHasCompany && userCompanyId in resource.data.members;
+
+      // UPDATE: User can update a contact (i.e., accept invite) if their company is approved
+      // and they are becoming the second member.
+      allow update: if isAuth() && 
+                       userHasCompany &&
+                       get(/databases/$(database)/documents/companies/$(userCompanyId)).data.status == 'Approved' &&
+                       userCompanyId in request.resource.data.members &&
+                       request.resource.data.status == 'Connected';
+
+      // CREATE: A user can create a contact if their own company is approved and they are companyA.
+      allow create: if isAuth() && 
+                       userHasCompany &&
+                       get(/databases/$(database)/documents/companies/$(userCompanyId)).data.status == 'Approved' &&
+                       request.resource.data.companyAId == userCompanyId &&
+                       (request.resource.data.status == 'Pending' || request.resource.data.status == 'Connected');
     }
 
+    // --- ORDERS ---
     match /orders/{orderId} {
-      // Allow read/update if the user is a member of the order.
-      allow read, update: if isRegisteredUser() && requestingUserCompanyId() in resource.data.members;
+      // Define helper variables for this scope.
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      let userHasCompany = 'companyId' in userDoc.data && userDoc.data.companyId != null;
+      let userCompanyId = userDoc.data.companyId;
 
-      // Allow creating an order if user is an approved seller and the data is valid.
-      allow create: if isApprovedUser() &&
-                     request.resource.data.sellerCompanyId == requestingUserCompanyId() &&
-                     requestingUserCompanyId() in request.resource.data.members &&
-                     request.resource.data.buyerCompanyId in request.resource.data.members;
+      // READ: User can read an order if their company is a member.
+      allow read: if isAuth() && userHasCompany && userCompanyId in resource.data.members;
+
+      // CREATE: The creator must be the seller and their company must be approved.
+      allow create: if isAuth() && 
+                       userHasCompany && 
+                       get(/databases/$(database)/documents/companies/$(userCompanyId)).data.status == 'Approved' &&
+                       request.resource.data.sellerCompanyId == userCompanyId;
+
+      // UPDATE: Any member of the order can update it, provided their company is approved.
+      allow update: if isAuth() && 
+                       userHasCompany && 
+                       get(/databases/$(database)/documents/companies/$(userCompanyId)).data.status == 'Approved' &&
+                       userCompanyId in resource.data.members;
     }
   }
 }
