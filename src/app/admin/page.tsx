@@ -1,14 +1,14 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { firestore } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, updateDoc, onSnapshot } from "firebase/firestore";
+import { collection, query, where, doc, writeBatch, onSnapshot } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import type { Company } from "@/types";
-import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 
 export default function AdminPage() {
@@ -43,10 +43,22 @@ export default function AdminPage() {
   }, [fetchPendingCompanies]);
 
 
-  const handleApprove = async (companyId: string) => {
+  const handleApprove = async (companyId: string, ownerUid: string | null | undefined) => {
+    if (!ownerUid) {
+      toast({ variant: "destructive", title: "Error", description: "Company has no owner and cannot be approved." });
+      return;
+    }
+    
     try {
+      const batch = writeBatch(firestore!);
+
       const companyRef = doc(firestore!, "companies", companyId);
-      await updateDoc(companyRef, { status: "Approved" });
+      batch.update(companyRef, { status: "Approved" });
+
+      const userRef = doc(firestore!, "users", ownerUid);
+      batch.update(userRef, { companyIsApproved: true });
+
+      await batch.commit();
       toast({ title: "Success", description: "Company has been approved." });
     } catch (error: any) {
       console.error("Error approving company:", error);
@@ -88,7 +100,7 @@ export default function AdminPage() {
                   {company.createdAt?.toDate().toLocaleDateString()}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button onClick={() => handleApprove(company.id)}>Approve</Button>
+                  <Button onClick={() => handleApprove(company.id, company.ownerUid)}>Approve</Button>
                 </TableCell>
               </TableRow>
             ))}

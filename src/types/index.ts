@@ -7,6 +7,7 @@ export interface UserData {
   email: string;
   companyId: string | null;
   createdAt: Timestamp;
+  companyIsApproved?: boolean;
   perms: {
     admin: boolean;
     buyer: boolean;
