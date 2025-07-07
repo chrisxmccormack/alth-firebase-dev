@@ -44,7 +44,7 @@ This project uses Firebase for authentication and database services. You need to
 
 This project includes Firestore security rules in the `firestore.rules` file. These rules are essential for protecting your data.
 
-**Before running the app**, you must deploy these rules and configure the System Admin UID within them.
+**⚠️ Before running the app**, you must deploy these rules and configure the System Admin UID within them. If you skip this step, you will get "PERMISSION_DENIED" errors.
 
 1.  **Install Firebase CLI**: If you don't have it, install the Firebase command-line tools:
     ```bash
@@ -57,11 +57,12 @@ This project includes Firestore security rules in the `firestore.rules` file. Th
 3.  **Configure Admin UID in Rules**:
     - Open the `firestore.rules` file.
     - Find the line with the placeholder `'YOUR_ADMIN_UID_HERE'`.
-    - Replace the placeholder with the same System Admin UID you set in your `.env.local` file.
+    - **You must replace this placeholder** with the same System Admin UID you set in your `.env.local` file. If you don't, the admin features and other parts of the app will not work correctly.
 4.  **Deploy Rules**: From your project root, run:
     ```bash
     firebase deploy --only firestore:rules
     ```
+    You should see a "Deploy complete!" message. If you see any errors, double-check that you replaced the admin UID placeholder correctly.
 
 ### Authorized Domains
 
