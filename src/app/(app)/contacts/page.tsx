@@ -160,6 +160,12 @@ export default function ContactsPage() {
                 Invite Contact
               </Link>
             </Button>
+            <Button asChild>
+              <Link href="/contacts/new">
+                <UserPlus className="mr-2" />
+                Create New Contact
+              </Link>
+            </Button>
         </div>
       </div>
 
