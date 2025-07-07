@@ -86,3 +86,15 @@ For social sign-in providers (like Google and Microsoft) and the invite-link flo
 6.  You should see an invitation prompt. Click "Accept Invitation".
 7.  You will be redirected to your **/contacts** page and should now see User A's company listed.
 8.  Sign out and sign back in as **User A**. Navigate to **/contacts**. You should now see User B's company in your list as well.
+
+## Testing the Orders Flow
+
+1.  **Prerequisites**: Two users (Seller, Buyer) who are connected as contacts.
+2.  **Seller**: Log in, navigate to **Selling**.
+3.  Click **Add Order**, select the Buyer's company, fill in order lines, and click **Create Draft Order**. The order appears in the table with "Draft" status.
+4.  **Buyer**: Log in, navigate to **Buying**.
+5.  The new order from the Seller should be visible. Click the **Agree** button. The status changes to "Agreed".
+6.  **Admin (Manual Step)**: Go to the Firebase Console -> Firestore. Find the new order in the `/orders` collection. Manually change the `status` field from "Agreed" to "Paid".
+7.  **Seller**: Go to **Selling**. The order status is now "Paid". Click the action menu (...) and select **Mark as Dispatched**. You can also add a `trackingId` in the console for testing. The status changes to "Dispatched".
+8.  **Buyer**: Go to **Buying**. The order status is "Dispatched". Click the **Mark as Delivered** button. The status changes to "Delivered".
+9.  **(Optional - Escrow)**: If the order used "Escrow", after it becomes "Delivered", the Buyer has 24 hours to click the **Dispute** button.

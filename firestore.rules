@@ -1,39 +1,114 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // --- USERS ---
+    function isSystemAdmin() {
+      // IMPORTANT: Replace this placeholder with your actual System Admin UID.
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getCompanyId() {
+        return getUserData().companyId;
+    }
+    
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isSystemAdmin();
     }
 
-    // --- COMPANIES ---
     match /companies/{companyId} {
-      // Any authenticated user can create a company profile.
-      allow create: if request.auth != null;
-
-      // Authenticated users can read a company's details if that company has been approved.
-      // This is necessary for contacts to be able to see each other's company names.
-      allow read: if request.auth != null && resource.data.status == 'Approved';
-
-      // Only the designated System Admin can update a company (i.e., to approve it).
-      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with the actual UID from Firebase Auth.
-      allow update: if request.auth != null && request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+      allow read: if isSignedIn();
+      allow create: if request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isSystemAdmin() ||
+                     (get(/databases/$(database)/documents/companies/$(companyId)).data.ownerUid == request.auth.uid);
+    }
+    
+    match /contacts/{contactId} {
+       allow read: if isSignedIn() && (
+                    resource.data.companyAId == getCompanyId() ||
+                    resource.data.companyBId == getCompanyId()
+                  );
+       allow create: if request.resource.data.companyAId == getCompanyId();
+       allow update: if (
+                        (resource.data.companyAId == getCompanyId() || resource.data.companyBId == getCompanyId()) ||
+                        (request.resource.data.companyBId == getCompanyId() && resource.data.companyBId == null)
+                     );
     }
 
-    // --- CONTACTS ---
-    match /contacts/{contactId} {
-      // The user creating the contact must exist in the /users collection
-      // and the companyAId they are providing must match their own companyId.
-      allow create: if request.auth != null &&
-                     exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyAId;
+    // --- ORDERS ---
+    function isSeller(order)  {
+      return getCompanyId() == order.sellerCompanyId;
+    }
+    function isBuyer(order)   {
+      return getCompanyId() == order.buyerCompanyId;
+    }
 
-      // A user can read or update a contact if their company is part of the contact.
-      allow read, update: if request.auth != null &&
-                           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyAId ||
-                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyBId);
+    // Check that only fields the user is allowed to change are being changed.
+    function sellerUpdatableFields() {
+      return [
+        'status', 'trackingId', 'lines', 'totals', 
+        'paymentMethod', 'currency', 'updatedAt'
+      ];
+    }
+    function buyerUpdatableFields() {
+      return ['status', 'updatedAt'];
+    }
+
+    function validSellerUpdate() {
+      let before = resource.data;
+      let after = request.resource.data;
+
+      // Allow if only permitted fields are being updated
+      let fieldsValid = request.writeFields.hasOnly(sellerUpdatableFields());
+
+      // Validate status transitions
+      let statusJumpAllowed =
+        (before.status == 'Draft' && after.status in ['Draft', 'Cancelled']) ||
+        (before.status == 'Agreed' && after.status in ['Paid', 'Dispatched', 'Cancelled']) ||
+        (before.status == 'Paid' && after.status == 'Dispatched') ||
+        (before.status == 'InQuery' && after.status in ['Completed', 'Cancelled']);
+
+      return fieldsValid && statusJumpAllowed;
+    }
+
+    function validBuyerUpdate() {
+      let before = resource.data;
+      let after = request.resource.data;
+
+      let fieldsValid = request.writeFields.hasOnly(buyerUpdatableFields());
+
+      let statusJumpAllowed =
+        (before.status == 'Draft' && after.status == 'Agreed') ||
+        (before.status == 'Dispatched' && after.status == 'Delivered') ||
+        (before.status == 'Delivered' && after.status in ['Completed', 'Disputed', 'InQuery']) ||
+        (before.status == 'InQuery' && after.status in ['Completed', 'Disputed']);
+
+      return fieldsValid && statusJumpAllowed;
+    }
+
+    match /orders/{orderId} {
+      allow read:   if isSignedIn() && (isSeller(resource.data) || isBuyer(resource.data) || isSystemAdmin());
+      allow create: if isSignedIn() && isSeller(request.resource.data);
+      allow update: if isSignedIn() && (
+                       isSystemAdmin() ||
+                       (isSeller(resource.data) && validSellerUpdate()) ||
+                       (isBuyer(resource.data)  && validBuyerUpdate())
+                    );
     }
   }
 }

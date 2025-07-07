@@ -10,7 +10,6 @@ export interface UserData {
   perms: {
     admin: boolean;
     buyer: boolean;
-
     seller: boolean;
   };
 }
@@ -57,4 +56,55 @@ export interface PopulatedContact {
   };
   partnerCompany: Company;
   createdAt: Timestamp;
+}
+
+// --- ORDERS ---
+
+export type Currency = "GBP" | "EUR" | "USD";
+export type PaymentMethod = "BankTransfer" | "Escrow" | "Crypto" | "TradeFinance";
+export type OrderStatus =
+  | "Draft"
+  | "Agreed"
+  | "Paid"
+  | "Dispatched"
+  | "Delivered"
+  | "Completed"
+  | "InQuery"
+  | "Cancelled"
+  | "Disputed";
+
+export interface OrderLine {
+  productName: string;
+  qty: number;
+  unitPrice: number;
+  vatTreatment: string; // For now, this is a simple text field
+  amountExVat: number;
+  amountIncVat: number;
+}
+
+export interface OrderTotals {
+  exVat: number;
+  vat: number;
+  incVat: number;
+}
+
+export interface Order {
+  id: string;
+  sellerCompanyId: string;
+  buyerCompanyId: string;
+  currency: Currency;
+  paymentMethod: PaymentMethod;
+  platformFeePct: number;
+  lines: OrderLine[];
+  totals: OrderTotals;
+  status: OrderStatus;
+  trackingId?: string | null;
+  escrowDeadline?: Timestamp | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface PopulatedOrder extends Order {
+    buyerCompany: Company;
+    sellerCompany: Company;
 }

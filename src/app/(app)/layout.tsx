@@ -33,7 +33,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Loader2, LayoutDashboard, Users, LogOut, ShieldCheck, ChevronsUpDown } from "lucide-react";
+import { Loader2, LayoutDashboard, Users, LogOut, ShieldCheck, ChevronsUpDown, ShoppingCart, ShoppingBag } from "lucide-react";
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { user, userData, loading } = useAuth();
@@ -92,9 +92,16 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }
 
   const navItems = [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/contacts", label: "Contacts", icon: Users },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, perm: 'any' },
+      { href: "/selling", label: "Selling", icon: ShoppingBag, perm: 'seller' },
+      { href: "/buying", label: "Buying", icon: ShoppingCart, perm: 'buyer' },
+      { href: "/contacts", label: "Contacts", icon: Users, perm: 'any' },
   ]
+
+  const visibleNavItems = navItems.filter(item => {
+    if (item.perm === 'any') return true;
+    return userData?.perms?.[item.perm as keyof typeof userData.perms];
+  });
 
   return (
     <SidebarProvider>
@@ -109,9 +116,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </SidebarHeader>
         <SidebarContent>
             <SidebarMenu>
-                {navItems.map(item => (
+                {visibleNavItems.map(item => (
                     <SidebarMenuItem key={item.href}>
-                        <SidebarMenuButton asChild isActive={pathname === item.href}>
+                        <SidebarMenuButton asChild isActive={pathname.startsWith(item.href)}>
                             <Link href={item.href}>
                                 <item.icon />
                                 <span>{item.label}</span>
