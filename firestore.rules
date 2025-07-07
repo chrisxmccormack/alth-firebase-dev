@@ -1,105 +1,157 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // --- HELPER FUNCTIONS ---
-    
-    // Is the user signed in?
+
+    // --- Helper Functions ---
     function isSignedIn() {
       return request.auth != null;
     }
-    
-    // Is the user the system admin?
-    function isAdmin() {
-      // IMPORTANT: Replace with your actual Admin UID in single quotes.
-      let adminUid = 'YOUR_ADMIN_UID_HERE';
-      return isSignedIn() && request.auth.uid == adminUid;
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // Does the user have a registered company?
-    function userCompanyId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId;
+    function getMyCompanyId() {
+        return getUserData().companyId;
     }
 
-    // Is the user's company approved?
+    // Is the currently authenticated user associated with an Approved company?
     function isApprovedUser() {
-      let companyId = userCompanyId();
-      return companyId != null &&
-             get(/databases/$(database)/documents/companies/$(companyId)).data.status == 'Approved';
+      let userCompanyId = getUserData().companyId;
+      return isSignedIn() && userCompanyId != null && get(/databases/$(database)/documents/companies/$(userCompanyId)).data.status == 'Approved';
     }
-    
-    // --- USERS ---
+
+    // Is the user the designated System Admin?
+    function isAdmin() {
+      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with your actual Firebase Admin User UID, keeping the single quotes.
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    }
+
+    // --- Collections ---
     match /users/{userId} {
-      // Admins can do anything.
-      // Users can read/update their own data.
-      // Any signed-in user can create their own user doc (on signup).
-      allow read, update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      // Users can only read/update their own data
+      allow read, update: if isSignedIn() && request.auth.uid == userId;
+      // Users can only be created during signup
       allow create: if isSignedIn();
     }
-    
-    // --- COMPANIES ---
-    match /companies/{companyId} {
-      allow read: if isSignedIn();
-      
-      // Allow create if:
-      // 1. You are the owner (initial company setup).
-      // 2. You are an approved user creating a company for a contact (owner is null).
-      // 3. You are an admin.
-      allow create: if isAdmin() ||
-                     (isSignedIn() && request.resource.data.ownerUid == request.auth.uid) ||
-                     (isApprovedUser() && request.resource.data.ownerUid == null);
-                      
-      // Only Admins can update company details directly (e.g., approve status).
-      allow update: if isAdmin();
-    }
-    
-    // --- CONTACTS ---
-    match /contacts/{contactId} {
-      // Allow read if your company is one of the members.
-      allow read: if isAdmin() || (isSignedIn() && userCompanyId() in resource.data.members);
-      
-      // Allow create for two scenarios: generating an invite link, or creating a direct contact.
-      allow create: if 
-        // Scenario 1: Generating an invite link
-        (isApprovedUser() &&
-         request.resource.data.status == 'Pending' &&
-         request.resource.data.companyAId == userCompanyId() &&
-         request.resource.data.companyBId == null &&
-         request.resource.data.inviteToken != null)
-        ||
-        // Scenario 2: Creating a direct contact via batch write
-        (isApprovedUser() &&
-         request.resource.data.status == 'Connected' &&
-         request.resource.data.companyAId == userCompanyId() &&
-         request.resource.data.companyBId != null &&
-         // The partner company being created in the same batch must have no owner.
-         getAfter(/databases/$(database)/documents/companies/$(request.resource.data.companyBId)).data.ownerUid == null);
 
-      // Allow update for one scenario: accepting an invite.
-      allow update: if 
-        // An approved user is accepting an invite.
+    match /companies/{companyId} {
+      // Any signed-in user can read any company's data (e.g., for invites, populating contacts)
+      allow read: if isSignedIn();
+
+      // Allow creating a new company profile if user doesn't have one,
+      // OR if an approved user is creating a manual contact (ownerless company)
+      allow create: if (
+        // Case 1: Standard company setup for a new user
+        (getUserData().companyId == null &&
+         request.resource.data.ownerUid == request.auth.uid &&
+         request.resource.data.status == 'Pending')
+        ||
+        // Case 2: Creating a manual contact company as part of a batch
         (isApprovedUser() &&
-         // The invite must be pending.
-         resource.data.status == 'Pending' &&
-         // They must be setting themselves as companyB.
-         request.resource.data.companyBId == userCompanyId() &&
-         // They are not trying to connect to their own company.
-         resource.data.companyAId != userCompanyId() &&
-         // The members list must be updated correctly.
-         request.resource.data.members == [resource.data.companyAId, userCompanyId()] &&
-         // The status must become 'Connected'.
-         request.resource.data.status == 'Connected' &&
-         // The invite token and expiry must be removed.
-         !('inviteToken' in request.resource.data) &&
-         !('expiresAt' in request.resource.data)
-        );
+         request.resource.data.ownerUid == null &&
+         request.resource.data.status == 'Approved')
+      );
+
+      // Only the admin can approve a company
+      allow update: if isAdmin() && request.resource.data.status == 'Approved';
     }
-    
-    // --- ORDERS ---
+
+    match /contacts/{contactId} {
+      // Users can read contacts where their company is a member
+      allow read: if isApprovedUser() && getMyCompanyId() in resource.data.members;
+
+      // Allow creating a 'Pending' invite or a 'Connected' direct contact
+      allow create: if isApprovedUser() && (
+        // Case 1: Creating a 'Pending' invite for others to accept
+        (
+          request.resource.data.status == 'Pending' &&
+          request.resource.data.companyAId == getMyCompanyId() &&
+          request.resource.data.companyBId == null &&
+          request.resource.data.members.size() == 1 &&
+          request.resource.data.members[0] == getMyCompanyId() &&
+          request.resource.data.inviteToken is string
+        ) ||
+        // Case 2: Creating a 'Connected' direct contact as part of a batch write
+        (
+          request.resource.data.status == 'Connected' &&
+          request.resource.data.companyAId == getMyCompanyId() &&
+          request.resource.data.companyBId != null &&
+          request.resource.data.inviteToken == null &&
+          request.resource.data.members.size() == 2 &&
+          getMyCompanyId() in request.resource.data.members &&
+          request.resource.data.companyBId in request.resource.data.members
+        )
+      );
+
+      // Allow a user to accept an invite, connecting themselves to an existing pending contact
+      allow update: if (
+        isApprovedUser() &&
+        // The contact must be 'Pending' before the update
+        resource.data.status == 'Pending' &&
+        // The user accepting must not be the one who sent the invite
+        resource.data.companyAId != getMyCompanyId() &&
+        // The update must set the status to 'Connected'
+        request.resource.data.status == 'Connected' &&
+        // The update must set the user's company as companyBId
+        request.resource.data.companyBId == getMyCompanyId() &&
+        // The update must correctly set the members array
+        request.resource.data.members.size() == 2 &&
+        resource.data.companyAId in request.resource.data.members &&
+        getMyCompanyId() in request.resource.data.members &&
+        // The update must remove the invite token and expiry
+        !('inviteToken' in request.resource.data) &&
+        !('expiresAt' in request.resource.data)
+      );
+    }
+
     match /orders/{orderId} {
-      // Allow read/write if your company is one of the members.
-      allow read, write: if isAdmin() || (isSignedIn() && userCompanyId() in resource.data.members);
+        // Members of an order (buyer or seller) can read it
+        allow read: if isApprovedUser() && getMyCompanyId() in resource.data.members;
+
+        // Creating a new order
+        allow create: if isApprovedUser() &&
+                         request.resource.data.sellerCompanyId == getMyCompanyId() &&
+                         request.resource.data.status == 'Draft';
+
+        // Updating an order has complex state transitions, secured here
+        allow update: if isApprovedUser() &&
+                         getMyCompanyId() in resource.data.members &&
+                         isValidOrderTransition(resource.data, request.resource.data);
+    }
+
+    // Helper function for validating order status transitions
+    function isValidOrderTransition(before, after) {
+      let transitions = {
+        'Draft': ['Agreed', 'Cancelled'],
+        'Agreed': ['Paid', 'Dispatched', 'Cancelled'],
+        'Paid': ['Dispatched'],
+        'Dispatched': ['Delivered'],
+        'Delivered': ['Completed', 'Disputed', 'InQuery'],
+        'InQuery': ['Completed', 'Disputed', 'Cancelled']
+      };
+      let validNextStates = transitions[before.status];
+      // A buyer can move from Draft to Agreed, or Dispatched to Delivered, or Delivered to Disputed
+      let isBuyerAction = getMyCompanyId() == before.buyerCompanyId &&
+                          ((before.status == 'Draft' && after.status == 'Agreed') ||
+                           (before.status == 'Dispatched' && after.status == 'Delivered') ||
+                           (before.status == 'Delivered' && after.status == 'Disputed' && before.paymentMethod == 'Escrow'));
+      // A seller can move from Agreed to Paid, Paid to Dispatched, or cancel Draft/Agreed orders
+      let isSellerAction = getMyCompanyId() == before.sellerCompanyId &&
+                           ((before.status == 'Paid' && after.status == 'Dispatched') || // Marking as dispatched
+                            ((before.status == 'Draft' || before.status == 'Agreed') && after.status == 'Cancelled'));
+      
+      // Admin can change status manually (e.g. mark as Paid)
+      let isAdminAction = isAdmin();
+
+      // Check if it's a valid transition type
+      let isValidTransition = isBuyerAction || isSellerAction || isAdminAction || 
+                                (getMyCompanyId() == before.sellerCompanyId && before.status == 'Agreed' && after.status == 'Paid'); // Special case for seller marking as paid
+      
+      // Only allow status to change to a valid next state and by a valid user role
+      return (isValidTransition && after.status in validNextStates);
     }
   }
 }
