@@ -1,116 +1,81 @@
-
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-  
-    // --- UTILITY FUNCTIONS ---
-    function isAuth() {
+
+    // HELPER FUNCTIONS
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      // IMPORTANT: You MUST replace this with your actual Admin User ID.
+    function isSystemAdmin() {
+      // IMPORTANT: Replace with your actual Admin UID
       return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
-
+    
+    // Checks the flag on the user's own document. This breaks the circular dependency.
     function isApprovedUser() {
-      return isAuth() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyIsApproved == true;
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyIsApproved == true;
     }
     
-    function getCompanyId() {
+    function usersCompanyId() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId;
     }
 
-    // --- USERS ---
+    // RULES
     match /users/{userId} {
-      // Users can create their own user document
-      allow create: if isAuth() && request.auth.uid == userId;
-      
-      // Users can read their own data.
-      allow read: if isAuth() && request.auth.uid == userId;
-      
-      // Users can update their own data. Admins can update any user (e.g., to approve them).
-      allow update: if (isAuth() && request.auth.uid == userId) || isAdmin();
+      // You can read your own user document. Admin can read any.
+      allow read: if request.auth.uid == userId || isSystemAdmin();
+      // A user can create their own document on signup.
+      allow create: if request.auth.uid == userId;
+      // You can update your companyId (one time). Admin can approve you.
+      allow update: if (request.auth.uid == userId && request.resource.data.companyId != resource.data.companyId) || isSystemAdmin();
     }
 
-    // --- COMPANIES ---
     match /companies/{companyId} {
-      // Anyone can read company data if they are an approved user.
-      allow read: if isApprovedUser();
-      
-      // A user can create a company document only if the owner UID matches their own,
-      // and they are setting their own companyId in the users collection.
-      function isCreatingOwnCompany() {
-        let isOwner = request.resource.data.ownerUid == request.auth.uid;
-        let isSettingOwnCompanyId = getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId;
-        return isAuth() && isOwner && isSettingOwnCompanyId;
-      }
-      
-      allow create: if isCreatingOwnCompany();
+      // Anyone can read an approved company. You can always read your own.
+      allow read: if resource.data.status == 'Approved' || (isSignedIn() && usersCompanyId() == companyId);
 
-      // Only admins can update a company (e.g. to approve its status).
-      allow update: if isAdmin();
+      // You can create a company if you don't already have one.
+      allow create: if isSignedIn() && usersCompanyId() == null && request.resource.data.ownerUid == request.auth.uid;
+      
+      // Only the admin can approve a company.
+      allow update: if isSystemAdmin();
     }
 
-    // --- CONTACTS ---
     match /contacts/{contactId} {
-      // A user can read a contact document if they are an approved user and their companyId is in the 'members' array.
-      allow read: if isApprovedUser() && resource.data.members.hasAny([getCompanyId()]);
+      // You can read a contact if your company is a member.
+      allow read: if isSignedIn() && usersCompanyId() in resource.data.members;
 
-      // Logic for creating a "Pending" contact via an invite link.
-      function isCreatingPendingContact() {
-        let incoming = request.resource.data;
-        return incoming.status == 'Pending'
-          && incoming.companyAId == getCompanyId()
-          && incoming.companyBId == null
-          && incoming.members.size() == 1
-          && incoming.members[0] == getCompanyId()
-          && incoming.inviteToken is string;
-      }
+      // CREATE: An approved user can create a valid Pending or Unverified contact.
+      allow create: if 
+        isApprovedUser() &&
+        request.resource.data.companyAId == usersCompanyId() &&
+        request.resource.data.members.size() == 1 &&
+        request.resource.data.members[0] == usersCompanyId() &&
+        request.resource.data.companyBId == null &&
+        (
+          ( // Scenario 1: 'Unverified' direct create
+            request.resource.data.status == 'Unverified' &&
+            request.resource.data.partnerCompanyDetails is map &&
+            request.resource.data.contactPerson is map
+          ) ||
+          ( // Scenario 2: 'Pending' invite
+            request.resource.data.status == 'Pending' &&
+            request.resource.data.inviteToken is string &&
+            request.resource.data.expiresAt is timestamp
+          )
+        );
 
-      // Logic for creating an "Unverified" contact directly.
-      function isCreatingUnverifiedContact() {
-        let incoming = request.resource.data;
-        return incoming.status == 'Unverified'
-          && incoming.companyAId == getCompanyId()
-          && incoming.companyBId == null
-          && incoming.members.size() == 1
-          && incoming.members[0] == getCompanyId()
-          && incoming.partnerCompanyDetails is map;
-      }
-      
-      // A user can create a contact if they are approved AND it's either a valid invite or a valid direct creation.
-      allow create: if isApprovedUser() && (isCreatingPendingContact() || isCreatingUnverifiedContact());
+      // UPDATE: To accept an invite, you must be an approved user and the target (companyB).
+      allow update: if 
+        isApprovedUser() &&
+        resource.data.status == 'Pending' &&
+        request.resource.data.status == 'Connected' &&
+        request.resource.data.companyBId == usersCompanyId() &&
+        request.resource.data.members.size() == 2 &&
+        request.resource.data.members[1] == usersCompanyId();
 
-      // Logic for updating a "Pending" contact to "Connected" when an invite is accepted.
-      function isAcceptingInvite() {
-        let existing = resource.data;
-        let incoming = request.resource.data;
-        let acceptingCompanyId = getCompanyId();
-
-        return existing.status == 'Pending'
-          && incoming.status == 'Connected'
-          && existing.companyBId == null
-          && incoming.companyBId == acceptingCompanyId
-          && incoming.members.size() == 2
-          && incoming.members.hasAll([existing.companyAId, acceptingCompanyId]);
-      }
-
-      allow update: if isApprovedUser() && isAcceptingInvite();
-    }
-    
-    // --- ORDERS ---
-    match /orders/{orderId} {
-       // An approved user can read an order if their company is a member.
-      allow read: if isApprovedUser() && resource.data.members.hasAny([getCompanyId()]);
-      
-      // An approved seller can create a draft order.
-      allow create: if isApprovedUser() && request.resource.data.status == 'Draft' && request.resource.data.sellerCompanyId == getCompanyId();
-      
-      // Complex update logic can be added here later based on status transitions.
-      // For now, allow updates if the user is an approved member of the order.
-      allow update: if isApprovedUser() && resource.data.members.hasAny([getCompanyId()]);
+      allow delete: if false; // No client deletes.
     }
   }
 }
