@@ -64,13 +64,18 @@ export default function BuyingPage() {
         companiesMap.set(doc.id, { id: doc.id, ...doc.data() } as Company);
       });
 
-      const populatedOrders: PopulatedOrder[] = fetchedOrders.map((order) => {
-        return {
-          ...order,
-          sellerCompany: companiesMap.get(order.sellerCompanyId)!,
-          buyerCompany: {id: companyId, name: 'Your Company'} as Company // Placeholder for self
-        };
-      });
+      const populatedOrders: PopulatedOrder[] = fetchedOrders
+        .map((order) => {
+          const sellerCompany = companiesMap.get(order.sellerCompanyId);
+          if (!sellerCompany) return null; // Skip if company not found
+
+          return {
+            ...order,
+            sellerCompany,
+            buyerCompany: {id: companyId, name: 'Your Company'} as Company, // Placeholder for self
+          };
+        })
+        .filter((o): o is PopulatedOrder => o !== null);
 
       setOrders(populatedOrders);
       setIsLoading(false);
