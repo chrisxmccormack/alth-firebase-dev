@@ -4,63 +4,71 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper Functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
+    // --- Helper Functions ---
 
-    function isSystemAdmin() {
-      // NOTE: Replace this with your actual Admin UID
+    function isAdmin() {
+      // The admin UID must be in single quotes.
       return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
-    
+
+    // A robust function to check if the current user is associated with an approved company.
     function isApprovedUser() {
-        // Read from the user's Firestore document.
-        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-        return userDoc.data.companyIsApproved == true;
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      // This is the key fix:
+      // 1. It checks if the user document exists.
+      // 2. It uses .get('field', false) to safely access the approval flag,
+      //    defaulting to 'false' if the field doesn't exist. This prevents errors
+      //    for older user accounts or race conditions.
+      return exists(userPath) && get(userPath).data.get('companyIsApproved', false) == true;
     }
 
-    // AUTH:
+    // A function to check if the user is a member of a given contact or order.
+    function isMember() {
+      // Get the user's companyId from their own user document.
+      let userCompanyId = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId;
+      // Check if that companyId is in the 'members' array of the document being accessed.
+      return userCompanyId in resource.data.members;
+    }
+
+    // --- Collection Rules ---
+
     match /users/{userId} {
-      allow read, update: if request.auth.uid == userId;
-      allow create: if isSignedIn();
+      // Users can read and update their own data.
+      // Users can create their own user document during registration.
+      allow read, update, create: if request.auth.uid == userId;
     }
-    
-    // COMPANIES:
+
     match /companies/{companyId} {
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
-      allow update: if isSystemAdmin();
-      allow read: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isSystemAdmin());
+      // Admins can read/update any company.
+      // The owner can read their own company document.
+      allow read: if isAdmin() || request.auth.uid == resource.data.ownerUid;
+      // Only Admins can update companies (for approval).
+      allow update: if isAdmin();
+      // Any signed-in user can create a company profile (it starts as 'Pending').
+      allow create: if request.auth != null &&
+                       request.resource.data.status == 'Pending' &&
+                       request.resource.data.ownerUid == request.auth.uid;
     }
-    
-    // CONTACTS
+
     match /contacts/{contactId} {
-      allow read: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members;
+      // An approved user can read contacts they are a member of.
+      allow read: if isApprovedUser() && isMember();
 
-      allow create: if (
-        // Case 1: Creating an "Unverified" contact (direct create).
-        // This is a simple, private record. The user just needs to be signed in
-        // and be the designated owner of the new contact document.
-        request.resource.data.status == 'Unverified' &&
-        isSignedIn() &&
-        request.resource.data.ownerUid == request.auth.uid
-      ) || (
-        // Case 2: Creating a "Pending" contact (invite link).
-        // This is a higher-security action, as it creates a shareable link.
-        // The user must be approved and belong to the company they are creating the link for.
-        request.resource.data.status == 'Pending' &&
-        isApprovedUser() &&
-        request.resource.data.companyAId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
-      );
+      // An approved user can update contacts they are a member of.
+      allow update: if isApprovedUser() && isMember();
 
-      // Only a connected member can update a contact (e.g. to accept an invite).
-      allow update: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in request.resource.data.members;
+      allow create: if
+        // Case 1: Creating an invite link ('Pending' status) requires user to be approved.
+        (isApprovedUser() && request.resource.data.status == 'Pending') ||
+        // Case 2: Creating a direct contact ('Unverified' status) requires user to be signed in and own the doc.
+        (request.auth != null && request.resource.data.status == 'Unverified' && request.resource.data.ownerUid == request.auth.uid);
     }
 
-    // ORDERS
     match /orders/{orderId} {
-        allow read, update: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members;
-        allow create: if isApprovedUser();
+      // An approved user can read/update orders they are a member of.
+      allow read, update: if isApprovedUser() && isMember();
+      // An approved user can create orders.
+      allow create: if isApprovedUser();
     }
   }
 }
