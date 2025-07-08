@@ -140,6 +140,7 @@ export async function createDirectContact(
   
       // Create a single contact document with status "Unverified"
       const newContactData = {
+        ownerUid: currentUserId,
         companyAId: currentCompanyId,
         companyBId: null,
         members: [currentCompanyId],

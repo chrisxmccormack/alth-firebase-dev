@@ -4,112 +4,63 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- UTILITY FUNCTIONS ---
+    // Helper Functions
     function isSignedIn() {
       return request.auth != null;
     }
 
     function isSystemAdmin() {
+      // NOTE: Replace this with your actual Admin UID
       return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
-
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
-    }
-
+    
     function isApprovedUser() {
-      let userData = getUserData(request.auth.uid);
-      return userData.companyIsApproved == true;
+        // Read from the user's Firestore document.
+        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+        return userDoc.data.companyIsApproved == true;
     }
 
-    // --- USERS ---
+    // AUTH:
     match /users/{userId} {
-      // Users can create their own user document on signup
-      allow create: if isSignedIn() && request.auth.uid == userId;
-
-      // Users can only read/update their own data
-      // This is also required for the rules functions to be able to read user data.
-      allow read, update: if isSignedIn() && request.auth.uid == userId;
+      allow read, update: if request.auth.uid == userId;
+      allow create: if isSignedIn();
     }
-
-    // --- COMPANIES ---
+    
+    // COMPANIES:
     match /companies/{companyId} {
-      // An approved user or an admin can read any company profile.
-      allow read: if isApprovedUser() || isSystemAdmin();
-
-      // Only the System Admin can approve or modify companies.
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isSystemAdmin();
-
-      // A user can create a company for themselves, but it starts as 'Pending'.
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid && request.resource.data.status == 'Pending';
+      allow read: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isSystemAdmin());
     }
-
-    // --- CONTACTS ---
+    
+    // CONTACTS
     match /contacts/{contactId} {
-      // Anyone who is a member of the contact can read it.
-      allow read: if isSignedIn() && getUserData(request.auth.uid).companyId in resource.data.members;
+      allow read: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members;
 
-      // --- CREATE RULES ---
-      // For creating an 'Unverified' contact, user only needs to be signed in.
-      // For creating a 'Pending' contact (invite link), user must be approved.
-      allow create: if isSignedIn() && 
-                      (
-                        (
-                          request.resource.data.status == 'Unverified' &&
-                          request.resource.data.companyAId == getUserData(request.auth.uid).companyId
-                        ) ||
-                        (
-                          request.resource.data.status == 'Pending' &&
-                          request.resource.data.companyAId == getUserData(request.auth.uid).companyId &&
-                          isApprovedUser()
-                        )
-                      );
+      allow create: if (
+        // Case 1: Creating an "Unverified" contact (direct create).
+        // This is a simple, private record. The user just needs to be signed in
+        // and be the designated owner of the new contact document.
+        request.resource.data.status == 'Unverified' &&
+        isSignedIn() &&
+        request.resource.data.ownerUid == request.auth.uid
+      ) || (
+        // Case 2: Creating a "Pending" contact (invite link).
+        // This is a higher-security action, as it creates a shareable link.
+        // The user must be approved and belong to the company they are creating the link for.
+        request.resource.data.status == 'Pending' &&
+        isApprovedUser() &&
+        request.resource.data.companyAId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+      );
 
-
-      // --- UPDATE RULES ---
-      // Only for accepting an invite. The user must be approved.
-      // Status must change from 'Pending' to 'Connected'.
-      allow update: if isApprovedUser() &&
-                      request.resource.data.companyBId == getUserData(request.auth.uid).companyId &&
-                      resource.data.status == 'Pending' &&
-                      request.resource.data.status == 'Connected';
+      // Only a connected member can update a contact (e.g. to accept an invite).
+      allow update: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in request.resource.data.members;
     }
 
-    // --- ORDERS ---
+    // ORDERS
     match /orders/{orderId} {
-        // Members of an order can read it.
-        allow read: if isApprovedUser() && getUserData(request.auth.uid).companyId in resource.data.members;
-
-        // An approved seller can create a draft order.
-        allow create: if isApprovedUser() &&
-                        request.resource.data.sellerCompanyId == getUserData(request.auth.uid).companyId &&
-                        request.resource.data.status == 'Draft';
-
-        // Complex update logic handled by a helper function.
-        allow update: if isApprovedUser() && canUpdateOrder(request, resource);
-    }
-
-    function canUpdateOrder(request, resource) {
-        let newStatus = request.resource.data.status;
-        let oldStatus = resource.data.status;
-        let userCompanyId = getUserData(request.auth.uid).companyId;
-        let isBuyer = resource.data.buyerCompanyId == userCompanyId;
-        let isSeller = resource.data.sellerCompanyId == userCompanyId;
-
-        return (
-            // Buyer can agree to a draft
-            (isBuyer && oldStatus == 'Draft' && newStatus == 'Agreed') ||
-            // Seller can mark as paid
-            (isSeller && oldStatus == 'Agreed' && newStatus == 'Paid') ||
-            // Seller can mark as dispatched
-            (isSeller && oldStatus == 'Paid' && newStatus == 'Dispatched') ||
-            // Buyer can mark as delivered
-            (isBuyer && oldStatus == 'Dispatched' && newStatus == 'Delivered') ||
-            // Buyer can dispute a delivered escrow order
-            (isBuyer && oldStatus == 'Delivered' && resource.data.paymentMethod == 'Escrow' && newStatus == 'Disputed') ||
-            // Seller can cancel a draft or agreed order
-            (isSeller && (oldStatus == 'Draft' || oldStatus == 'Agreed') && newStatus == 'Cancelled')
-        );
+        allow read, update: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members;
+        allow create: if isApprovedUser();
     }
   }
 }

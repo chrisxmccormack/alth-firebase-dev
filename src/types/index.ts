@@ -49,6 +49,7 @@ export interface Contact {
   inviteToken?: string;
   expiresAt?: Timestamp;
   createdAt: Timestamp;
+  ownerUid?: string;
   contactPerson?: {
     firstName: string;
     lastName: string;
