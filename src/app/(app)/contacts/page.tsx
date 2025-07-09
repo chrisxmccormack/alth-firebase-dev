@@ -1,8 +1,6 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import {
   collection,
   query,
@@ -16,12 +14,6 @@ import { useAuth } from "@/context/auth-context";
 import { firestore } from "@/lib/firebase";
 import type { Company, Contact, PopulatedContact } from "@/types";
 
-import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import {
   Card,
   CardContent,
@@ -38,15 +30,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, UserPlus } from "lucide-react";
 import Loading from "./loading";
-import { InviteContactPanel } from "./invite-panel";
 
 export default function ContactsPage() {
   const { userData } = useAuth();
   const [contacts, setContacts] = useState<PopulatedContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreatePanelOpen, setCreatePanelOpen] = useState(false);
 
   const getRelationshipType = (contact: PopulatedContact) => {
     const { buyer, seller } = contact.relationship;
@@ -67,8 +56,7 @@ export default function ContactsPage() {
 
     const q = query(
       collection(firestore!, "contacts"),
-      where("members", "array-contains", companyId),
-      where("status", "in", ["Connected", "Unverified"])
+      where("members", "array-contains", companyId)
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
@@ -149,6 +137,9 @@ export default function ContactsPage() {
 
       setContacts(allContacts);
       setIsLoading(false);
+    }, (error) => {
+        console.error("Error fetching contacts:", error);
+        setIsLoading(false);
     });
 
     return unsubscribe;
@@ -172,25 +163,6 @@ export default function ContactsPage() {
           <h1 className="text-3xl font-bold font-headline">Contacts</h1>
           <p className="text-muted-foreground">Manage your business connections.</p>
         </div>
-        <div className="flex items-center gap-2">
-            <Button asChild>
-              <Link href="/contacts/new">
-                <PlusCircle className="mr-2" />
-                Invite
-              </Link>
-            </Button>
-            <Sheet open={isCreatePanelOpen} onOpenChange={setCreatePanelOpen}>
-              <SheetTrigger asChild>
-                <Button>
-                  <UserPlus className="mr-2" />
-                  Create
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="w-full sm:max-w-xl p-0">
-                  <InviteContactPanel onContactCreated={() => setCreatePanelOpen(false)} />
-              </SheetContent>
-            </Sheet>
-        </div>
       </div>
 
       <Card>
@@ -204,9 +176,7 @@ export default function ContactsPage() {
           {contacts.length === 0 ? (
             <div className="text-center py-10">
               <p className="text-muted-foreground">You have no connections yet.</p>
-              <Button variant="link" asChild>
-                <Link href="/contacts/new">Invite your first contact</Link>
-              </Button>
+              <p className="text-sm text-muted-foreground">Contacts can be added manually in the Firebase Console.</p>
             </div>
           ) : (
             <Table>
