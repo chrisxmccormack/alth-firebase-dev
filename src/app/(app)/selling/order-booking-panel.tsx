@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -349,6 +348,12 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                   </FormItem>
                 )}
               />
+
+              <Separator />
+              <h3 className="text-lg font-medium">Trade Finance</h3>
+              <div className="p-4 border rounded-md bg-muted/25 text-center text-muted-foreground">
+                <p>Trade finance options will be available here.</p>
+              </div>
 
             </div>
           </ScrollArea>
