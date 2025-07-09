@@ -107,7 +107,12 @@ export default function ContactsPage() {
         })
         .filter((c): c is PopulatedContact => c !== null);
       
-      populatedContacts.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+      // Safer sorting
+      populatedContacts.sort((a,b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        return timeB - timeA;
+      });
 
       setContacts(populatedContacts);
       setIsLoading(false);
@@ -173,7 +178,7 @@ export default function ContactsPage() {
                     </TableCell>
                     <TableCell>{contact.partnerCompany.country}</TableCell>
                     <TableCell>
-                      {contact.createdAt.toDate().toLocaleDateString()}
+                      {contact.createdAt?.toDate ? contact.createdAt.toDate().toLocaleDateString() : 'N/A'}
                     </TableCell>
                   </TableRow>
                 ))}
