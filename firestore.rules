@@ -3,11 +3,106 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // THIS IS A TEMPORARY RULE FOR DIAGNOSTICS.
-    // It allows anyone to read and write to your database.
-    // We will secure this again once the issue is resolved.
-    match /{document=**} {
-      allow read, write: if true;
+    // --- HELPER FUNCTIONS ---
+    function isSystemAdmin() {
+      // IMPORTANT: Replace this placeholder with your actual Admin User UID
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    function getCompanyData(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId)).data;
+    }
+    
+    // --- COLLECTIONS ---
+
+    match /users/{userId} {
+      allow read, update: if isUser(userId) || isSystemAdmin();
+      // Allow creation when a new user signs up
+      allow create: if isUser(userId);
+    }
+
+    match /companies/{companyId} {
+      // Any signed-in user can see the list of companies
+      allow read: if isSignedIn();
+      
+      // A user can create a company document if they are the owner
+      allow create: if isSignedIn() 
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.status == 'Pending';
+
+      // Only the system admin can approve companies or update admin-only fields
+      allow update: if isSystemAdmin();
+    }
+    
+    match /orders/{orderId} {
+      // Allow read if user's company is part of the order
+      allow read: if isSignedIn() && getUserData(request.auth.uid).companyId in resource.data.members;
+
+      // Allow create if the user is the seller and the data is valid
+      allow create: if isSignedIn()
+                    && request.resource.data.sellerCompanyId == getUserData(request.auth.uid).companyId
+                    && request.resource.data.sellerCompanyId in request.resource.data.members
+                    && request.resource.data.buyerCompanyId in request.resource.data.members
+                    && request.resource.data.status == 'Draft';
+      
+      // Allow update based on a state machine logic
+      allow update: if isSignedIn() && canUpdateOrder(resource.data, request.resource.data);
+    }
+
+    function canUpdateOrder(existingOrder, newOrder) {
+        let userCompanyId = getUserData(request.auth.uid).companyId;
+        let isBuyer = userCompanyId == existingOrder.buyerCompanyId;
+        let isSeller = userCompanyId == existingOrder.sellerCompanyId;
+        
+        // Fields that cannot be changed after the order is created
+        let immutableFields = ['sellerCompanyId', 'buyerCompanyId', 'members', 'currency', 'lines', 'totals', 'createdAt', 'paymentMethod', 'platformFeePct', 'tradeFinanceOption'];
+        
+        // Check if any immutable fields are being changed
+        let isModifyingImmutableFields = newOrder.keys().hasAny(immutableFields);
+
+        // Check that only allowed fields are being updated
+        let allowedUpdateFields = ['status', 'updatedAt', 'trackingId', 'escrowDeadline'];
+        let hasOnlyAllowedUpdateFields = newOrder.keys().removeAll(existingOrder.keys()).hasOnly(allowedUpdateFields);
+
+        // Status transition logic
+        let newStatus = newOrder.status;
+        let oldStatus = existingOrder.status;
+
+        // Buyer transitions
+        let buyerCanAgree = isBuyer && oldStatus == 'Draft' && newStatus == 'Agreed';
+        let buyerCanMarkDelivered = isBuyer && oldStatus == 'Dispatched' && newStatus == 'Delivered';
+        let buyerCanDispute = isBuyer && oldStatus == 'Delivered' && newStatus == 'Disputed' && existingOrder.paymentMethod == 'Escrow' && request.time < existingOrder.escrowDeadline;
+        
+        // Seller transitions (Note: 'Paid' is often an external or admin action)
+        let sellerCanMarkDispatched = isSeller && (oldStatus == 'Paid' || oldStatus == 'Agreed') && newStatus == 'Dispatched';
+        
+        // Anyone in the order can cancel a draft
+        let canCancel = (isSeller || isBuyer) && (oldStatus == 'Draft' || oldStatus == 'Agreed') && newStatus == 'Cancelled';
+        
+        // Admin can perform certain status changes
+        let adminCanMarkPaid = isSystemAdmin() && oldStatus == 'Agreed' && newStatus == 'Paid';
+        
+        return !isModifyingImmutableFields && hasOnlyAllowedUpdateFields && (
+            buyerCanAgree ||
+            buyerCanMarkDelivered ||
+            buyerCanDispute ||
+            sellerCanMarkDispatched ||
+            canCancel ||
+            adminCanMarkPaid ||
+            isSystemAdmin() // Allow admin to make other changes if needed
+        );
     }
   }
 }
