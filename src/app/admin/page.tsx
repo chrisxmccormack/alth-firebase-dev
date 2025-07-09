@@ -19,12 +19,15 @@ import type { Company } from "@/types";
 import { Loader2 } from "lucide-react";
 import { updateCompanyAdminDetails } from "@/actions/companies";
 
+// Preprocess empty strings or nulls to undefined for optional number fields
+const numberPreprocess = (val: any) => (val === "" || val === null ? undefined : val);
+
 const adminCompanySchema = z.object({
-  creditLimit: z.coerce.number().optional(),
-  creditUsage: z.coerce.number().optional(),
-  rate14day: z.coerce.number().optional(),
-  rate30day: z.coerce.number().optional(),
-  rate60day: z.coerce.number().optional(),
+  creditLimit: z.preprocess(numberPreprocess, z.number({ coerce: true }).optional()),
+  creditUsage: z.preprocess(numberPreprocess, z.number({ coerce: true }).optional()),
+  rate14day: z.preprocess(numberPreprocess, z.number({ coerce: true }).optional()),
+  rate30day: z.preprocess(numberPreprocess, z.number({ coerce: true }).optional()),
+  rate60day: z.preprocess(numberPreprocess, z.number({ coerce: true }).optional()),
 });
 
 type AdminCompanyFormValues = z.infer<typeof adminCompanySchema>;
@@ -39,11 +42,11 @@ export default function AdminPage() {
   const form = useForm<AdminCompanyFormValues>({
     resolver: zodResolver(adminCompanySchema),
     defaultValues: {
-      creditLimit: 0,
-      creditUsage: 0,
-      rate14day: 0,
-      rate30day: 0,
-      rate60day: 0,
+      creditLimit: undefined,
+      creditUsage: undefined,
+      rate14day: undefined,
+      rate30day: undefined,
+      rate60day: undefined,
     }
   });
 
@@ -78,11 +81,11 @@ export default function AdminPage() {
   useEffect(() => {
     if (selectedCompany) {
       form.reset({
-        creditLimit: selectedCompany.creditLimit || 0,
-        creditUsage: selectedCompany.creditUsage || 0,
-        rate14day: selectedCompany.rate14day || 0,
-        rate30day: selectedCompany.rate30day || 0,
-        rate60day: selectedCompany.rate60day || 0,
+        creditLimit: selectedCompany.creditLimit ?? undefined,
+        creditUsage: selectedCompany.creditUsage ?? undefined,
+        rate14day: selectedCompany.rate14day ?? undefined,
+        rate30day: selectedCompany.rate30day ?? undefined,
+        rate60day: selectedCompany.rate60day ?? undefined,
       });
     }
   }, [selectedCompany, form]);
@@ -202,7 +205,7 @@ export default function AdminPage() {
                         <FormItem>
                           <FormLabel>Credit Limit</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} value={field.value ?? ''} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -215,7 +218,7 @@ export default function AdminPage() {
                         <FormItem>
                           <FormLabel>Credit Usage</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} value={field.value ?? ''} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -231,7 +234,7 @@ export default function AdminPage() {
                         <FormItem>
                           <FormLabel>14 Day Rate (%)</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.1" placeholder="0.0" {...field} />
+                            <Input type="number" step="0.1" placeholder="0.0" {...field} value={field.value ?? ''} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -244,7 +247,7 @@ export default function AdminPage() {
                         <FormItem>
                           <FormLabel>30 Day Rate (%)</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.1" placeholder="0.0" {...field} />
+                            <Input type="number" step="0.1" placeholder="0.0" {...field} value={field.value ?? ''} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -257,7 +260,7 @@ export default function AdminPage() {
                         <FormItem>
                           <FormLabel>60 Day Rate (%)</FormLabel>
                           <FormControl>
-                            <Input type="number" step="0.1" placeholder="0.0" {...field} />
+                            <Input type="number" step="0.1" placeholder="0.0" {...field} value={field.value ?? ''} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

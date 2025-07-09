@@ -23,10 +23,10 @@ export async function updateCompanyAdminDetails(
     
     const companyRef = doc(firestore!, 'companies', companyId);
     
-    // Firestore's updateDoc handles undefined fields gracefully.
-    // We can clean the object to avoid sending empty fields, which is good practice.
+    // Convert any `undefined` values from the form into `null` so they can be
+    // stored in Firestore. This allows users to clear a field by emptying the input.
     const cleanedData = Object.fromEntries(
-        Object.entries(data).map(([key, value]) => [key, value === '' ? null : value]).filter(([_, v]) => v !== undefined)
+        Object.entries(data).map(([key, value]) => [key, value === undefined ? null : value])
     );
       
     if (Object.keys(cleanedData).length === 0) {
