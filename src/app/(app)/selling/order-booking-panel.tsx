@@ -53,7 +53,7 @@ const orderLineSchema = z.object({
 const orderSchema = z.object({
   buyerCompanyId: z.string().min(1, "A buyer must be selected."),
   currency: z.enum(["GBP", "EUR", "USD"]),
-  paymentMethod: z.enum(["BankTransfer", "Escrow", "Crypto", "TradeFinance"]),
+  paymentMethod: z.enum(["BankTransfer", "Escrow", "Crypto"]),
   lines: z.array(orderLineSchema).min(1, "At least one order line is required.").max(50),
 });
 
@@ -269,12 +269,6 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                             <FormControl><RadioGroupItem value="Crypto" id="r3" className="peer sr-only" /></FormControl>
                              <Label htmlFor="r3" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
                                 Crypto <span className="text-xs text-muted-foreground">(3% Fee)</span>
-                             </Label>
-                        </FormItem>
-                        <FormItem>
-                            <FormControl><RadioGroupItem value="TradeFinance" id="r4" className="peer sr-only" /></FormControl>
-                             <Label htmlFor="r4" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                Trade Finance <span className="text-xs text-muted-foreground">(0% Fee)</span>
                              </Label>
                         </FormItem>
                       </RadioGroup>

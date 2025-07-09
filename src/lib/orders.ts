@@ -11,7 +11,6 @@ export function getPlatformFeePct(paymentMethod: PaymentMethod): number {
       case "Crypto":
         return 3;
       case "BankTransfer":
-      case "TradeFinance":
       default:
         return 0;
     }

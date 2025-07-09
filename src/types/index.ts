@@ -37,7 +37,7 @@ export interface Company {
 // --- ORDERS ---
 
 export type Currency = "GBP" | "EUR" | "USD";
-export type PaymentMethod = "BankTransfer" | "Escrow" | "Crypto" | "TradeFinance";
+export type PaymentMethod = "BankTransfer" | "Escrow" | "Crypto";
 export type OrderStatus =
   | "Draft"
   | "Agreed"
