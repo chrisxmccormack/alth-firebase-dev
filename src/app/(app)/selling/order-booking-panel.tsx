@@ -91,9 +91,11 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
   const platformFeePct = getPlatformFeePct(paymentMethod as any);
   
   const platformFeeExVat = productTotals.exVat * (platformFeePct / 100);
-  const platformFeeIncVat = platformFeeExVat * 1.20;
+  const platformFeeVat = platformFeeExVat * 0.20;
+  const platformFeeIncVat = platformFeeExVat + platformFeeVat;
 
   const finalExVatTotal = productTotals.exVat + platformFeeExVat;
+  const finalVatTotal = productTotals.vat + platformFeeVat;
   const finalIncVatTotal = productTotals.incVat + platformFeeIncVat;
 
 
@@ -260,7 +262,7 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                     </div>
                   );
                 })}
-                 <FormMessage>{form.formState.errors.lines?.message}</FormMessage>
+                <FormMessage>{form.formState.errors.lines?.message}</FormMessage>
                 
                 <Button type="button" variant="outline" size="sm" onClick={() => append({ productName: "", qty: 1, unitPrice: 0, vatTreatment: 'Standard' })}>
                   Add Line
@@ -296,6 +298,22 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                     <div className="col-span-1 flex justify-end">
                         {/* Empty div for alignment, as there's no delete button */}
                     </div>
+                </div>
+                
+                <div className="flex flex-col items-end space-y-2 pt-4">
+                  <div className="w-full max-w-xs flex justify-between text-sm">
+                      <span className="text-muted-foreground">Total Net</span>
+                      <span>{finalExVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="w-full max-w-xs flex justify-between text-sm">
+                      <span className="text-muted-foreground">Total VAT</span>
+                      <span>{finalVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <Separator className="max-w-xs" />
+                  <div className="w-full max-w-xs flex justify-between text-lg font-bold">
+                      <span>Total Gross</span>
+                      <span>{finalIncVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
                 </div>
 
               </div>
@@ -335,11 +353,7 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
             </div>
           </ScrollArea>
           <SheetFooter className="p-6 bg-background border-t w-full">
-            <div className="flex justify-between items-center w-full">
-                <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Total (ex. VAT): {finalExVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                    <p className="text-lg font-bold">Total (inc. VAT): {finalIncVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                </div>
+            <div className="flex justify-end w-full">
                 <Button type="submit" disabled={isLoading} size="lg">
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Create Draft Order
