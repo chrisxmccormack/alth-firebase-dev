@@ -78,6 +78,7 @@ export interface Order {
   members: string[];
   currency: Currency;
   paymentMethod: PaymentMethod;
+  tradeFinanceOption?: "None" | "14Days" | "30Days" | "60Days";
   platformFeePct: number;
   lines: OrderLine[];
   totals: OrderTotals;

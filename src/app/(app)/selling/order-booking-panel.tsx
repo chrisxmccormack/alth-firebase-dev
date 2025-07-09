@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -54,6 +55,7 @@ const orderSchema = z.object({
   currency: z.enum(["GBP", "EUR", "USD"]),
   paymentMethod: z.enum(["BankTransfer", "Escrow", "Crypto"]),
   lines: z.array(orderLineSchema).min(1, "At least one order line is required.").max(50),
+  tradeFinanceOption: z.enum(["None", "14Days", "30Days", "60Days"]),
 });
 
 type OrderFormValues = z.infer<typeof orderSchema>;
@@ -75,6 +77,7 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
       currency: "GBP",
       paymentMethod: "BankTransfer",
       lines: [{ productName: "", qty: 1, unitPrice: 0, vatTreatment: "Standard" }],
+      tradeFinanceOption: "None",
     },
   });
 
@@ -186,12 +189,12 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
               <div className="space-y-4">
                 <div className="grid grid-cols-12 gap-2 items-start px-2 -mb-3">
                   <div className="col-span-11 grid grid-cols-12 gap-x-2">
-                      <div className="col-span-12"><Label>Product Name</Label></div>
-                      <div className="col-span-2"><Label>Qty</Label></div>
+                      <div className="col-span-4"><Label>Product Name</Label></div>
+                      <div className="col-span-1"><Label>Qty</Label></div>
                       <div className="col-span-2"><Label>Unit Price</Label></div>
-                      <div className="col-span-3"><Label>VAT</Label></div>
-                      <div className="col-span-2"><Label>Net Amount</Label></div>
-                      <div className="col-span-3"><Label>Gross Amount</Label></div>
+                      <div className="col-span-2"><Label>VAT</Label></div>
+                      <div className="col-span-1 text-right"><Label>Net</Label></div>
+                      <div className="col-span-2 text-right"><Label>Gross</Label></div>
                   </div>
                 </div>
 
@@ -206,14 +209,14 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                     <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
                        <div className="col-span-11 grid grid-cols-12 gap-x-2 gap-y-1">
                           <FormField control={form.control} name={`lines.${index}.productName`} render={({ field }) => (
-                              <FormItem className="col-span-12">
+                              <FormItem className="col-span-4">
                                  <FormLabel className="sr-only">Product Name</FormLabel>
                                  <FormControl><Input placeholder="Product Description" {...field} /></FormControl>
                                  <FormMessage />
                               </FormItem>
                            )}/>
                           <FormField control={form.control} name={`lines.${index}.qty`} render={({ field }) => (
-                             <FormItem className="col-span-2">
+                             <FormItem className="col-span-1">
                                 <FormLabel className="sr-only">Qty</FormLabel>
                                 <FormControl><Input type="number" placeholder="1" {...field} /></FormControl>
                                 <FormMessage />
@@ -227,7 +230,7 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                              </FormItem>
                           )}/>
                            <FormField control={form.control} name={`lines.${index}.vatTreatment`} render={({ field }) => (
-                             <FormItem className="col-span-3">
+                             <FormItem className="col-span-2">
                                 <FormLabel className="sr-only">VAT</FormLabel>
                                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                                       <FormControl><SelectTrigger><SelectValue placeholder="VAT" /></SelectTrigger></FormControl>
@@ -240,15 +243,15 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                                 <FormMessage />
                              </FormItem>
                           )}/>
-                          <div className="col-span-2">
+                          <div className="col-span-1">
                             <FormLabel className="sr-only">Net Amount</FormLabel>
-                            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                            <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm">
                               {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </div>
-                          <div className="col-span-3">
+                          <div className="col-span-2">
                             <FormLabel className="sr-only">Gross Amount</FormLabel>
-                            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm font-medium">
+                            <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm font-medium">
                               {grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </div>
@@ -269,27 +272,27 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
 
                 <div className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md bg-muted/50">
                     <div className="col-span-11 grid grid-cols-12 gap-x-2 gap-y-1">
-                        <div className="col-span-12">
+                        <div className="col-span-4">
                             <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">Platform Fee</div>
                         </div>
-                        <div className="col-span-2">
-                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">1</div>
+                        <div className="col-span-1">
+                            <div className="flex h-10 w-full items-center justify-center rounded-md border-input bg-background px-3 py-2 text-sm">1</div>
                         </div>
                         <div className="col-span-2">
-                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
+                            <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-background px-3 py-2 text-sm">
                                 {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
-                        <div className="col-span-3">
+                        <div className="col-span-2">
                             <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">Standard</div>
                         </div>
-                        <div className="col-span-2">
-                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
+                        <div className="col-span-1">
+                            <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-background px-3 py-2 text-sm">
                                 {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
-                        <div className="col-span-3">
-                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">
+                        <div className="col-span-2">
+                            <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-background px-3 py-2 text-sm font-medium">
                                 {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
@@ -351,9 +354,83 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
 
               <Separator />
               <h3 className="text-lg font-medium">Trade Finance</h3>
-              <div className="p-4 border rounded-md bg-muted/25 text-center text-muted-foreground">
-                <p>Trade finance options will be available here.</p>
-              </div>
+              <FormField
+                control={form.control}
+                name="tradeFinanceOption"
+                render={({ field }) => (
+                  <FormItem className="space-y-3">
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="grid grid-cols-4 gap-4"
+                      >
+                        <FormItem>
+                          <FormControl>
+                            <RadioGroupItem
+                              value="None"
+                              id="tf-none"
+                              className="peer sr-only"
+                            />
+                          </FormControl>
+                          <Label
+                            htmlFor="tf-none"
+                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                          >
+                            None
+                          </Label>
+                        </FormItem>
+                        <FormItem>
+                          <FormControl>
+                            <RadioGroupItem
+                              value="14Days"
+                              id="tf-14"
+                              className="peer sr-only"
+                            />
+                          </FormControl>
+                          <Label
+                            htmlFor="tf-14"
+                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                          >
+                            14 Days
+                          </Label>
+                        </FormItem>
+                        <FormItem>
+                          <FormControl>
+                            <RadioGroupItem
+                              value="30Days"
+                              id="tf-30"
+                              className="peer sr-only"
+                            />
+                          </FormControl>
+                          <Label
+                            htmlFor="tf-30"
+                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                          >
+                            30 Days
+                          </Label>
+                        </FormItem>
+                        <FormItem>
+                          <FormControl>
+                            <RadioGroupItem
+                              value="60Days"
+                              id="tf-60"
+                              className="peer sr-only"
+                            />
+                          </FormControl>
+                          <Label
+                            htmlFor="tf-60"
+                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                          >
+                            60 Days
+                          </Label>
+                        </FormItem>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
             </div>
           </ScrollArea>
