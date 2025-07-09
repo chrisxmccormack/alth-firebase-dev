@@ -4,82 +4,64 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =============================================
-    // Helper Functions
-    // =============================================
-
-    // Function to check if the user is the designated system admin.
-    function isSystemAdmin() {
-      // IMPORTANT: Replace 'YOUR_ADMIN_UID_HERE' with your actual admin UID.
-      return request.auth.uid == 'zcL2mAF06kcAPb68DMIfLmkYROE3';
+    // ---- Helper Functions ----
+    function isUserAuthenticated() {
+      return request.auth != null;
     }
 
-    // Function to check if the user's company has been approved.
-    function isApprovedUser() {
-      // Safely access the user's custom data from Firestore.
-      // This checks for the 'companyIsApproved' flag on the user's document.
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return userDoc != null && userDoc.data.companyIsApproved == true;
-    }
-
-    // =============================================
-    // Users Collection
-    // =============================================
-    match /users/{userId} {
-      // Users can read and update their own document.
-      allow read, update: if request.auth.uid == userId;
-      // Users can create their own user document upon signup.
-      allow create: if request.auth.uid == userId;
-    }
-
-    // =============================================
-    // Companies Collection
-    // =============================================
-    match /companies/{companyId} {
-      // The system admin can read and write to any company document for approval purposes.
-      allow read, write: if isSystemAdmin();
-      // An approved user can read any company's document. This is needed to populate partner data.
-      allow read: if isApprovedUser();
-      // A user can create a company document if they are the owner.
-      allow create: if request.auth.uid == request.resource.data.ownerUid;
-    }
-
-    // =============================================
-    // Contacts Collection
-    // =============================================
-    match /contacts/{contactId} {
-      // Allow a user to GET a specific contact doc if they are approved and a member.
-      allow get: if isApprovedUser() && request.auth.token.companyId in resource.data.members;
-      
-      // Allow a user to LIST contacts if they are approved.
-      // The query in the app MUST filter by the user's companyId.
-      allow list: if isApprovedUser();
-      
-      // Allow a user to create a contact doc if they are the owner of it.
-      allow create: if isApprovedUser() && request.auth.uid == request.resource.data.ownerUid;
-      
-      // Allow an authenticated user to update a contact if they are the owner
-      // or if they are connecting to an invite.
-      allow update: if isApprovedUser() && (
-        (resource.data.ownerUid == request.auth.uid) ||
-        (request.resource.data.companyBId == request.auth.token.companyId)
-      );
+    function isCompanyOwner(companyDoc) {
+      return request.auth.uid == companyDoc.data.ownerUid;
     }
     
-    // =============================================
-    // Orders Collection
-    // =============================================
-    match /orders/{orderId} {
-      // Allow a user to GET a specific order if they are approved and a member.
-      allow get: if isApprovedUser() && request.auth.token.companyId in resource.data.members;
+    function isSystemAdmin() {
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    }
 
-      // Allow a user to LIST orders if they are approved.
-      // The query in the app MUST filter by the user's companyId.
-      allow list: if isApprovedUser();
+    function isMemberOf(doc) {
+      // To check membership, we must get the user's companyId from the users collection
+      let userCompanyId = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId;
+      return userCompanyId in doc.data.members;
+    }
+    
+    // ---- User Rules ----
+    match /users/{userId} {
+      allow read, update, delete: if request.auth.uid == userId;
+      allow create: if isUserAuthenticated();
+    }
+
+    // ---- Company Rules ----
+    match /companies/{companyId} {
+      allow read: if isUserAuthenticated();
+      allow create: if isUserAuthenticated();
       
-      // Allow an approved user to create/update orders.
-      // Business logic and status transitions are handled by server actions.
-      allow write: if isApprovedUser();
+      // Only the system admin can approve companies. Owners can update their own company details.
+      allow update: if isSystemAdmin() || isCompanyOwner(resource);
+    }
+    
+    // ---- Contact Rules ----
+    match /contacts/{contactId} {
+      // You can get a specific contact if you are a member of it.
+      allow get: if isMemberOf(resource);
+
+      // You can list contacts if you are a signed-in user.
+      // The query from the client MUST be trusted to filter by the user's companyId.
+      allow list: if isUserAuthenticated();
+      
+      // You can create/update a contact if you are a member of it.
+      allow create, update: if isMemberOf(request.resource);
+    }
+
+    // ---- Order Rules ----
+    match /orders/{orderId} {
+      // You can get a specific order if you are a member of it.
+       allow get: if isMemberOf(resource);
+
+      // You can list orders if you are a signed-in user.
+      // The query from the client MUST be trusted to filter by the user's companyId.
+      allow list: if isUserAuthenticated();
+      
+      // You can create/update an order if you are a member of it.
+      allow create, update: if isMemberOf(request.resource);
     }
   }
 }
