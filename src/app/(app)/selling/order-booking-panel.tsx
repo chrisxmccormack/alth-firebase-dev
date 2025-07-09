@@ -15,7 +15,7 @@ import {
   documentId,
 } from "firebase/firestore";
 import { firestore } from "@/lib/firebase";
-import { calculateTotals } from "@/lib/orders";
+import { calculateTotals, getPlatformFeePct } from "@/lib/orders";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,7 +85,14 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
   });
 
   const watchedLines = useWatch({ control: form.control, name: "lines" });
-  const totals = calculateTotals(watchedLines.map(l => ({...l, amountExVat: 0, amountIncVat: 0})));
+  const productTotals = calculateTotals(watchedLines.map(l => ({...l, amountExVat: 0, amountIncVat: 0})));
+
+  const paymentMethod = useWatch({ control: form.control, name: "paymentMethod" });
+  const platformFeePct = getPlatformFeePct(paymentMethod);
+  const platformFeeAmount = productTotals.exVat * (platformFeePct / 100);
+
+  const finalExVatTotal = productTotals.exVat + platformFeeAmount;
+  const finalIncVatTotal = productTotals.incVat + platformFeeAmount;
 
 
   const fetchBuyers = useCallback(async () => {
@@ -241,6 +248,41 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                   );
                 })}
                  <FormMessage>{form.formState.errors.lines?.message}</FormMessage>
+
+                 {platformFeeAmount > 0 && (
+                  <div className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md bg-muted/50">
+                      <div className="col-span-11 grid grid-cols-12 gap-x-2 gap-y-1">
+                          <div className="col-span-12">
+                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">Platform Fee</div>
+                          </div>
+                          <div className="col-span-2">
+                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">1</div>
+                          </div>
+                          <div className="col-span-2">
+                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
+                                  {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                          </div>
+                          <div className="col-span-3">
+                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">Exempt</div>
+                          </div>
+                          <div className="col-span-2">
+                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
+                                  {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                          </div>
+                          <div className="col-span-3">
+                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">
+                                  {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                          </div>
+                      </div>
+                      <div className="col-span-1 flex justify-end">
+                          {/* Empty div for alignment, as there's no delete button */}
+                      </div>
+                  </div>
+                )}
+
                 <Button type="button" variant="outline" size="sm" onClick={() => append({ productName: "", qty: 1, unitPrice: 0, vatTreatment: 'Standard' })}>
                   Add Line
                 </Button>
@@ -283,8 +325,8 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
           <SheetFooter className="p-6 bg-background border-t w-full">
             <div className="flex justify-between items-center w-full">
                 <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Total (ex. VAT): {totals.exVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                    <p className="text-lg font-bold">Total (inc. VAT): {totals.incVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-sm text-muted-foreground">Total (ex. VAT): {finalExVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-lg font-bold">Total (inc. VAT): {finalIncVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
                 <Button type="submit" disabled={isLoading} size="lg">
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
