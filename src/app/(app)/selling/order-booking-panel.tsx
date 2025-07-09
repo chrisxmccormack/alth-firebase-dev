@@ -174,52 +174,72 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
               <Separator />
               <h3 className="text-lg font-medium">Order Lines</h3>
               <div className="space-y-4">
-                {fields.map((field, index) => (
-                  <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
-                     <div className="col-span-11 grid grid-cols-4 gap-2">
-                        <FormField control={form.control} name={`lines.${index}.productName`} render={({ field }) => (
-                            <FormItem className="col-span-4">
-                               <FormLabel className={index !== 0 ? 'sr-only' : ''}>Product Name</FormLabel>
-                               <FormControl><Input placeholder="Product Description" {...field} /></FormControl>
-                               <FormMessage />
-                            </FormItem>
-                         )}/>
-                        <FormField control={form.control} name={`lines.${index}.qty`} render={({ field }) => (
-                           <FormItem>
-                              <FormLabel className={index !== 0 ? 'sr-only' : ''}>Qty</FormLabel>
-                              <FormControl><Input type="number" placeholder="1" {...field} /></FormControl>
-                              <FormMessage />
-                           </FormItem>
-                        )}/>
-                        <FormField control={form.control} name={`lines.${index}.unitPrice`} render={({ field }) => (
-                           <FormItem>
-                              <FormLabel className={index !== 0 ? 'sr-only' : ''}>Unit Price</FormLabel>
-                              <FormControl><Input type="number" step="0.01" placeholder="100.00" {...field} /></FormControl>
-                              <FormMessage />
-                           </FormItem>
-                        )}/>
-                         <FormField control={form.control} name={`lines.${index}.vatTreatment`} render={({ field }) => (
-                           <FormItem>
-                              <FormLabel className={index !== 0 ? 'sr-only' : ''}>VAT</FormLabel>
-                               <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="VAT" /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="Standard">Standard</SelectItem>
-                                        <SelectItem value="Zero">Zero-rated</SelectItem>
-                                        <SelectItem value="Exempt">Exempt</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                              <FormMessage />
-                           </FormItem>
-                        )}/>
-                     </div>
-                     <div className="col-span-1 flex justify-end">
-                        <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="mt-8">
-                           <Trash2 className="h-4 w-4" />
-                        </Button>
-                     </div>
-                  </div>
-                ))}
+                {fields.map((field, index) => {
+                  const line = watchedLines[index];
+                  const qty = Number(line?.qty) || 0;
+                  const unitPrice = Number(line?.unitPrice) || 0;
+                  const netAmount = qty * unitPrice;
+                  const grossAmount = line?.vatTreatment === 'Standard' ? netAmount * 1.20 : netAmount;
+
+                  return (
+                    <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
+                       <div className="col-span-11 grid grid-cols-12 gap-x-2 gap-y-1">
+                          <FormField control={form.control} name={`lines.${index}.productName`} render={({ field }) => (
+                              <FormItem className="col-span-12">
+                                 <FormLabel className={index !== 0 ? 'sr-only' : ''}>Product Name</FormLabel>
+                                 <FormControl><Input placeholder="Product Description" {...field} /></FormControl>
+                                 <FormMessage />
+                              </FormItem>
+                           )}/>
+                          <FormField control={form.control} name={`lines.${index}.qty`} render={({ field }) => (
+                             <FormItem className="col-span-2">
+                                <FormLabel className={index !== 0 ? 'sr-only' : ''}>Qty</FormLabel>
+                                <FormControl><Input type="number" placeholder="1" {...field} /></FormControl>
+                                <FormMessage />
+                             </FormItem>
+                          )}/>
+                          <FormField control={form.control} name={`lines.${index}.unitPrice`} render={({ field }) => (
+                             <FormItem className="col-span-2">
+                                <FormLabel className={index !== 0 ? 'sr-only' : ''}>Unit Price</FormLabel>
+                                <FormControl><Input type="number" step="0.01" placeholder="100.00" {...field} /></FormControl>
+                                <FormMessage />
+                             </FormItem>
+                          )}/>
+                           <FormField control={form.control} name={`lines.${index}.vatTreatment`} render={({ field }) => (
+                             <FormItem className="col-span-3">
+                                <FormLabel className={index !== 0 ? 'sr-only' : ''}>VAT</FormLabel>
+                                 <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                      <FormControl><SelectTrigger><SelectValue placeholder="VAT" /></SelectTrigger></FormControl>
+                                      <SelectContent>
+                                          <SelectItem value="Standard">Standard</SelectItem>
+                                          <SelectItem value="Zero">Zero-rated</SelectItem>
+                                          <SelectItem value="Exempt">Exempt</SelectItem>
+                                      </SelectContent>
+                                  </Select>
+                                <FormMessage />
+                             </FormItem>
+                          )}/>
+                          <div className="col-span-2">
+                            <FormLabel className={index !== 0 ? 'sr-only' : ''}>Net Amount</FormLabel>
+                            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                              {netAmount.toFixed(2)}
+                            </div>
+                          </div>
+                          <div className="col-span-3">
+                            <FormLabel className={index !== 0 ? 'sr-only' : ''}>Gross Amount</FormLabel>
+                            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm font-medium">
+                              {grossAmount.toFixed(2)}
+                            </div>
+                          </div>
+                       </div>
+                       <div className="col-span-1 flex justify-end">
+                          <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="mt-8">
+                             <Trash2 className="h-4 w-4" />
+                          </Button>
+                       </div>
+                    </div>
+                  );
+                })}
                  <FormMessage>{form.formState.errors.lines?.message}</FormMessage>
                 <Button type="button" variant="outline" size="sm" onClick={() => append({ productName: "", qty: 1, unitPrice: 0, vatTreatment: 'Standard' })}>
                   Add Line
