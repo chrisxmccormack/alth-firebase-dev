@@ -52,7 +52,7 @@ export interface Contact {
   ownerUid?: string;
   contactPerson?: {
     firstName: string;
-    lastName: string;
+    lastName:string;
     email: string;
   };
   partnerCompanyDetails?: {
