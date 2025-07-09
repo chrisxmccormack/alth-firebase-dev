@@ -98,16 +98,21 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
   
   const { platformFeeExVat, platformFeeVat, platformFeeIncVat } = useMemo(() => {
     const baseFeePct = getPlatformFeePct(paymentMethod as any);
-    let calculatedFeeExVat = productTotals.exVat * (baseFeePct / 100);
+    const basePlatformFee = productTotals.exVat * (baseFeePct / 100);
 
+    let tradeFinanceFee = 0;
     if (tradeFinanceOption === '14Days') {
       const rate = selectedBuyer?.rate14day;
-      if (rate && rate > 0 && rate < 100) {
+      // Also check product total is positive to avoid calculating a fee on nothing
+      if (rate && rate > 0 && rate < 100 && productTotals.exVat > 0) {
         const rateDecimal = rate / 100;
-        calculatedFeeExVat = calculatedFeeExVat / (1 - rateDecimal);
+        // The fee is the difference between the grossed-up amount and the original product amount
+        tradeFinanceFee = (productTotals.exVat / (1 - rateDecimal)) - productTotals.exVat;
       }
     }
     // Note: Future logic for 30/60 days will go here.
+
+    const calculatedFeeExVat = basePlatformFee + tradeFinanceFee;
 
     const feeVat = calculatedFeeExVat * 0.20; // Standard 20% VAT on fee
     const feeIncVat = calculatedFeeExVat + feeVat;
