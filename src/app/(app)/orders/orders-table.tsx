@@ -26,6 +26,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
   } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
@@ -99,6 +100,9 @@ const ActionCell = ({ order, role }: { order: PopulatedOrder, role: "seller" | "
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                    <DropdownMenuItem>Show</DropdownMenuItem>
+                    <DropdownMenuItem>Send</DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     {order.status === 'Agreed' && <DropdownMenuItem onClick={() => handleUpdateStatus('Paid')}>Mark as Paid</DropdownMenuItem>}
                     {order.status === 'Paid' && <DropdownMenuItem onClick={() => handleUpdateStatus('Dispatched')}>Mark as Dispatched</DropdownMenuItem>}
                     {(order.status === 'Draft' || order.status === 'Agreed') && <DropdownMenuItem onClick={() => handleUpdateStatus('Cancelled')}>Cancel Order</DropdownMenuItem>}
