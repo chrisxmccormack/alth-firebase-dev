@@ -8,10 +8,14 @@ import { updateOrder } from '@/actions/orders';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
-import type { Order } from '@/types';
+import type { OrderStatus } from '@/types';
 
 interface InvoiceActionsProps {
-  order: Order;
+  order: {
+    id: string;
+    status: OrderStatus;
+    buyerCompanyId: string;
+  };
 }
 
 export function InvoiceActions({ order }: InvoiceActionsProps) {

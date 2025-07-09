@@ -68,6 +68,13 @@ export default async function InvoicePage({ params }: { params: { orderId: strin
     const { order, sellerCompany, buyerCompany } = data;
     const { lines, totals, currency, createdAt, id, status } = order;
 
+    // Create a plain, serializable object to pass to the Client Component
+    const serializableOrderForActions = {
+      id: order.id,
+      status: order.status,
+      buyerCompanyId: order.buyerCompanyId,
+    };
+
     const formatCurrency = (amount: number) => {
         return `${currency} ${amount.toFixed(2)}`;
     }
@@ -90,7 +97,7 @@ export default async function InvoicePage({ params }: { params: { orderId: strin
                                     <AlethiumLogo />
                                     <h1 className="text-3xl font-bold font-headline text-foreground">Invoice</h1>
                                 </div>
-                                <InvoiceActions order={order} />
+                                <InvoiceActions order={serializableOrderForActions} />
                             </div>
                             <Badge className={`${statusColors[order.status] || 'bg-gray-200 text-gray-800'}`}>
                                 {order.status}
