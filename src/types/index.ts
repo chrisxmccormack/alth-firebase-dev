@@ -32,6 +32,13 @@ export interface Company {
   ownerEmail?: string;
   ownerFirstName?: string;
   ownerLastName?: string;
+
+  // Admin-only fields
+  creditLimit?: number;
+  creditUsage?: number;
+  rate14day?: number;
+  rate30day?: number;
+  rate60day?: number;
 }
 
 // --- ORDERS ---

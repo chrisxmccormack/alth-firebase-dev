@@ -2,21 +2,50 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+
 import { firestore } from "@/lib/firebase";
 import { collection, query, orderBy, doc, writeBatch, onSnapshot } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import type { Company } from "@/types";
 import { Loader2 } from "lucide-react";
+import { updateCompanyAdminDetails } from "@/actions/companies";
+
+const adminCompanySchema = z.object({
+  creditLimit: z.coerce.number().optional(),
+  creditUsage: z.coerce.number().optional(),
+  rate14day: z.coerce.number().optional(),
+  rate30day: z.coerce.number().optional(),
+  rate60day: z.coerce.number().optional(),
+});
+
+type AdminCompanyFormValues = z.infer<typeof adminCompanySchema>;
 
 export default function AdminPage() {
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+
+  const form = useForm<AdminCompanyFormValues>({
+    resolver: zodResolver(adminCompanySchema),
+    defaultValues: {
+      creditLimit: 0,
+      creditUsage: 0,
+      rate14day: 0,
+      rate30day: 0,
+      rate60day: 0,
+    }
+  });
 
   const fetchCompanies = useCallback(async () => {
     setIsLoading(true);
@@ -44,6 +73,20 @@ export default function AdminPage() {
     }
   }, [fetchCompanies]);
 
+  const selectedCompany = allCompanies.find(c => c.id === selectedCompanyId);
+  
+  useEffect(() => {
+    if (selectedCompany) {
+      form.reset({
+        creditLimit: selectedCompany.creditLimit || 0,
+        creditUsage: selectedCompany.creditUsage || 0,
+        rate14day: selectedCompany.rate14day || 0,
+        rate30day: selectedCompany.rate30day || 0,
+        rate60day: selectedCompany.rate60day || 0,
+      });
+    }
+  }, [selectedCompany, form]);
+
 
   const handleApprove = async (companyId: string, ownerUid: string | null | undefined) => {
     if (!ownerUid) {
@@ -67,9 +110,20 @@ export default function AdminPage() {
       toast({ variant: "destructive", title: "Error", description: "Could not approve company." });
     }
   };
+
+  const onSubmitAdminDetails = async (data: AdminCompanyFormValues) => {
+    if (!selectedCompanyId) return;
+    setIsSaving(true);
+    const result = await updateCompanyAdminDetails(selectedCompanyId, data);
+    if (result.success) {
+      toast({ title: "Success", description: "Company details have been updated." });
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.error });
+    }
+    setIsSaving(false);
+  };
   
   const pendingCompanies = allCompanies.filter(c => c.status === "Pending");
-  const selectedCompany = allCompanies.find(c => c.id === selectedCompanyId);
 
   return (
     <div className="space-y-8">
@@ -136,12 +190,89 @@ export default function AdminPage() {
           </Select>
 
           {selectedCompany && (
-              <div className="mt-6 p-4 border rounded-md bg-muted/50">
-                  <h3 className="font-medium text-lg">Admin Fields for {selectedCompany.name}</h3>
-                  <p className="text-sm text-muted-foreground mt-2">
-                      Admin-only fields for this company will be added here.
-                  </p>
-              </div>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmitAdminDetails)} className="mt-6 p-4 border rounded-md bg-muted/50 space-y-6">
+                <h3 className="font-medium text-lg mb-4">Admin Fields for {selectedCompany.name}</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="creditLimit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Credit Limit</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="creditUsage"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Credit Usage</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="rate14day"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>14 Day Rate (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.1" placeholder="0.0" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                     <FormField
+                      control={form.control}
+                      name="rate30day"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>30 Day Rate (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.1" placeholder="0.0" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                     <FormField
+                      control={form.control}
+                      name="rate60day"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>60 Day Rate (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.1" placeholder="0.0" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                </div>
+                
+                <div className="flex justify-end">
+                    <Button type="submit" disabled={isSaving}>
+                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Save Changes
+                    </Button>
+                </div>
+              </form>
+            </Form>
           )}
         </CardContent>
       </Card>
