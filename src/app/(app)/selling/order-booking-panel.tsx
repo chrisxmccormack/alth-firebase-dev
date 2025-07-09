@@ -190,17 +190,6 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
               <Separator />
               <h3 className="text-lg font-medium">Order Lines</h3>
               <div className="space-y-4">
-                <div className="grid grid-cols-12 gap-2 items-start px-2 -mb-3">
-                  <div className="col-span-11 grid grid-cols-12 gap-x-2">
-                      <div className="col-span-4"><Label>Product Name</Label></div>
-                      <div className="col-span-1"><Label>Qty</Label></div>
-                      <div className="col-span-2"><Label>Unit Price</Label></div>
-                      <div className="col-span-2"><Label>VAT</Label></div>
-                      <div className="col-span-1 text-right"><Label>Net</Label></div>
-                      <div className="col-span-2 text-right"><Label>Gross</Label></div>
-                  </div>
-                </div>
-
                 {fields.map((field, index) => {
                   const line = watchedLines[index];
                   const qty = Number(line?.qty) || 0;
@@ -209,64 +198,98 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                   const grossAmount = line?.vatTreatment === 'Standard' ? netAmount * 1.20 : netAmount;
 
                   return (
-                    <div key={field.id} className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md">
-                       <div className="col-span-11 grid grid-cols-12 gap-x-2 gap-y-1">
-                          <FormField control={form.control} name={`lines.${index}.productName`} render={({ field }) => (
-                              <FormItem className="col-span-4">
-                                 <FormLabel className="sr-only">Product Name</FormLabel>
-                                 <FormControl><Input placeholder="Product Description" {...field} /></FormControl>
-                                 <FormMessage />
-                              </FormItem>
-                           )}/>
-                          <FormField control={form.control} name={`lines.${index}.qty`} render={({ field }) => (
-                             <FormItem className="col-span-1">
-                                <FormLabel className="sr-only">Qty</FormLabel>
-                                <FormControl><Input type="number" placeholder="1" {...field} /></FormControl>
-                                <FormMessage />
-                             </FormItem>
-                          )}/>
-                          <FormField control={form.control} name={`lines.${index}.unitPrice`} render={({ field }) => (
-                             <FormItem className="col-span-2">
-                                <FormLabel className="sr-only">Unit Price</FormLabel>
-                                <FormControl><Input type="number" step="0.01" placeholder="100.00" {...field} /></FormControl>
-                                <FormMessage />
-                             </FormItem>
-                          )}/>
-                           <FormField control={form.control} name={`lines.${index}.vatTreatment`} render={({ field }) => (
-                             <FormItem className="col-span-2">
-                                <FormLabel className="sr-only">VAT</FormLabel>
-                                 <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                      <FormControl><SelectTrigger><SelectValue placeholder="VAT" /></SelectTrigger></FormControl>
-                                      <SelectContent>
-                                          <SelectItem value="Standard">Standard</SelectItem>
-                                          <SelectItem value="Zero">Zero-rated</SelectItem>
-                                          <SelectItem value="Exempt">Exempt</SelectItem>
-                                      </SelectContent>
-                                  </Select>
-                                <FormMessage />
-                             </FormItem>
-                          )}/>
-                          <div className="col-span-1">
-                            <FormLabel className="sr-only">Net Amount</FormLabel>
-                            <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm">
-                              {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
+                    <div key={field.id} className="space-y-4 rounded-md border p-4 relative">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => remove(index)}
+                        className="absolute top-2 right-2"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Remove line</span>
+                      </Button>
+
+                      <FormField
+                        control={form.control}
+                        name={`lines.${index}.productName`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Product Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Enter product description..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <FormField
+                          control={form.control}
+                          name={`lines.${index}.qty`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Qty</FormLabel>
+                              <FormControl>
+                                <Input type="number" placeholder="1" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`lines.${index}.unitPrice`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Unit Price</FormLabel>
+                              <FormControl>
+                                <Input type="number" step="0.01" placeholder="100.00" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`lines.${index}.vatTreatment`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>VAT</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="VAT" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Standard">Standard</SelectItem>
+                                  <SelectItem value="Zero">Zero-rated</SelectItem>
+                                  <SelectItem value="Exempt">Exempt</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <div className="space-y-2">
+                          <Label>Net</Label>
+                          <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                            {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
-                          <div className="col-span-2">
-                            <FormLabel className="sr-only">Gross Amount</FormLabel>
-                            <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm font-medium">
-                              {grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Gross</Label>
+                          <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm font-medium">
+                            {grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
-                       </div>
-                       <div className="col-span-1 flex justify-end">
-                          <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)} className="mt-8">
-                             <Trash2 className="h-4 w-4" />
-                          </Button>
-                       </div>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
+
                 <FormMessage>{form.formState.errors.lines?.message}</FormMessage>
                 
                 <Button type="button" variant="outline" size="sm" onClick={() => append({ productName: "", qty: 1, unitPrice: 0, vatTreatment: 'Standard' })}>
