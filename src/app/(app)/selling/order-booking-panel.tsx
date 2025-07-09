@@ -94,7 +94,7 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
     return buyers.find(b => b.id === watchedBuyerId);
   }, [buyers, watchedBuyerId]);
 
-  const productTotals = calculateTotals(watchedLines.map(l => ({...l, amountExVat: 0, amountIncVat: 0})));
+  const productTotals = calculateTotals(watchedLines.filter(l => l.productName).map(l => ({...l, amountExVat: 0, amountIncVat: 0})));
   const platformFeePct = getPlatformFeePct(paymentMethod as any);
   
   const platformFeeExVat = productTotals.exVat * (platformFeePct / 100);
@@ -112,7 +112,6 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
     const companyId = userData.companyId;
     const companiesRef = collection(firestore!, "companies");
     
-    // Fetch all companies except the current user's own company
     const q = query(
         companiesRef, 
         where(documentId(), "!=", companyId)
@@ -132,7 +131,6 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
     if (!userData?.companyId) return;
     setIsLoading(true);
     try {
-      // Re-calculate totals on the server, but client-side data is good enough for creation
       const result = await createOrder(userData.companyId, data);
       if (result.success) {
         toast({ title: "Success", description: "Draft order has been created." });
@@ -367,7 +365,7 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                       <RadioGroup
                         onValueChange={field.onChange}
                         defaultValue={field.value}
-                        className="grid grid-cols-4 gap-4"
+                        className="grid grid-cols-2 gap-4"
                       >
                         <FormItem>
                           <FormControl>
