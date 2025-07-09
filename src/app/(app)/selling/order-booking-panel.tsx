@@ -37,7 +37,6 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Trash2 } from "lucide-react";
@@ -98,13 +97,12 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
   const platformFeePct = getPlatformFeePct(paymentMethod as any);
   
   const platformFeeExVat = productTotals.exVat * (platformFeePct / 100);
-  const platformFeeVat = platformFeeExVat * 0.20;
+  const platformFeeVat = platformFeeExVat * 0.20; // Standard 20% VAT on fee
   const platformFeeIncVat = platformFeeExVat + platformFeeVat;
 
   const finalExVatTotal = productTotals.exVat + platformFeeExVat;
   const finalVatTotal = productTotals.vat + platformFeeVat;
   const finalIncVatTotal = productTotals.incVat + platformFeeIncVat;
-
 
   const fetchBuyers = useCallback(async () => {
     if (!userData?.companyId) return;
@@ -147,352 +145,352 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
 
   return (
     <div className="h-full flex flex-col">
-      <SheetHeader className="p-6 flex-shrink-0">
+      <SheetHeader className="p-6 flex-shrink-0 border-b">
         <SheetTitle>Add New Order</SheetTitle>
         <SheetDescription>Create a new sales order. It will be saved as a draft.</SheetDescription>
       </SheetHeader>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col overflow-y-hidden">
-          <ScrollArea className="flex-1">
-            <div className="px-6 pb-6 space-y-6">
-              
-              <div className="grid grid-cols-2 gap-4">
-                <FormField control={form.control} name="buyerCompanyId" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Buyer</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select a buyer" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          {buyers.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField control={form.control} name="currency" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Currency</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select currency" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                           <SelectItem value="GBP">GBP</SelectItem>
-                           <SelectItem value="USD">USD</SelectItem>
-                           <SelectItem value="EUR">EUR</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+      
+      <div className="flex-1 overflow-y-auto">
+        <Form {...form}>
+          <form
+            id="order-booking-form"
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="p-6 space-y-6"
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="buyerCompanyId" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Buyer</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select a buyer" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {buyers.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField control={form.control} name="currency" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select currency" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                         <SelectItem value="GBP">GBP</SelectItem>
+                         <SelectItem value="USD">USD</SelectItem>
+                         <SelectItem value="EUR">EUR</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-              <Separator />
-              <h3 className="text-lg font-medium">Order Lines</h3>
-              <div className="space-y-4">
-                {fields.map((field, index) => {
-                  const line = watchedLines[index];
-                  const qty = Number(line?.qty) || 0;
-                  const unitPrice = Number(line?.unitPrice) || 0;
-                  const netAmount = qty * unitPrice;
-                  const grossAmount = line?.vatTreatment === 'Standard' ? netAmount * 1.20 : netAmount;
+            <Separator />
+            <h3 className="text-lg font-medium">Order Lines</h3>
+            <div className="space-y-4">
+              {fields.map((field, index) => {
+                const line = watchedLines[index];
+                const qty = Number(line?.qty) || 0;
+                const unitPrice = Number(line?.unitPrice) || 0;
+                const netAmount = qty * unitPrice;
+                const grossAmount = line?.vatTreatment === 'Standard' ? netAmount * 1.20 : netAmount;
 
-                  return (
-                    <div key={field.id} className="space-y-4 rounded-md border p-4 relative">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => remove(index)}
-                        className="absolute top-2 right-2"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Remove line</span>
-                      </Button>
+                return (
+                  <div key={field.id} className="space-y-4 rounded-md border p-4 relative">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => remove(index)}
+                      className="absolute top-2 right-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sr-only">Remove line</span>
+                    </Button>
 
+                    <FormField
+                      control={form.control}
+                      name={`lines.${index}.productName`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Product Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter product description..." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                       <FormField
                         control={form.control}
-                        name={`lines.${index}.productName`}
+                        name={`lines.${index}.qty`}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Product Name</FormLabel>
+                            <FormLabel>Qty</FormLabel>
                             <FormControl>
-                              <Input placeholder="Enter product description..." {...field} />
+                              <Input type="number" placeholder="1" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                        <FormField
-                          control={form.control}
-                          name={`lines.${index}.qty`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Qty</FormLabel>
+                      <FormField
+                        control={form.control}
+                        name={`lines.${index}.unitPrice`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unit Price</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="0.01" placeholder="100.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`lines.${index}.vatTreatment`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>VAT</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
                               <FormControl>
-                                <Input type="number" placeholder="1" {...field} />
+                                <SelectTrigger>
+                                  <SelectValue placeholder="VAT" />
+                                </SelectTrigger>
                               </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`lines.${index}.unitPrice`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Unit Price</FormLabel>
-                              <FormControl>
-                                <Input type="number" step="0.01" placeholder="100.00" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`lines.${index}.vatTreatment`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>VAT</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="VAT" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="Standard">Standard</SelectItem>
-                                  <SelectItem value="Zero">Zero-rated</SelectItem>
-                                  <SelectItem value="Exempt">Exempt</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <div className="space-y-2">
-                          <Label>Net</Label>
-                          <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm">
-                            {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </div>
+                              <SelectContent>
+                                <SelectItem value="Standard">Standard</SelectItem>
+                                <SelectItem value="Zero">Zero-rated</SelectItem>
+                                <SelectItem value="Exempt">Exempt</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div className="space-y-2">
+                        <Label>Net</Label>
+                        <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                          {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
-                        <div className="space-y-2">
-                          <Label>Gross</Label>
-                          <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm font-medium">
-                            {grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Gross</Label>
+                        <div className="flex h-10 w-full items-center justify-end rounded-md border border-input bg-muted px-3 py-2 text-sm font-medium">
+                          {grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
+              <FormMessage>{form.formState.errors.lines?.message}</FormMessage>
+            </div>
+            
+            <Button type="button" variant="outline" size="sm" onClick={() => append({ productName: "", qty: 1, unitPrice: 0, vatTreatment: 'Standard' })}>
+              Add Line
+            </Button>
 
-                <FormMessage>{form.formState.errors.lines?.message}</FormMessage>
-                
+            <div className="space-y-4 rounded-md border p-4">
+              <div className="space-y-2">
+                <FormLabel>Product Name</FormLabel>
+                <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
+                  Platform Fee
+                </div>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => append({ productName: "", qty: 1, unitPrice: 0, vatTreatment: 'Standard' })}>
-                Add Line
-              </Button>
 
-              <div className="space-y-4 rounded-md border p-4">
-                <div>
-                  <FormLabel>Product Name</FormLabel>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="space-y-2">
+                  <FormLabel>Qty</FormLabel>
+                  <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                    1
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <FormLabel>Unit Price</FormLabel>
+                  <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                    {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <FormLabel>VAT</FormLabel>
                   <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
-                    Platform Fee
+                    Standard
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <div className="space-y-2">
-                    <FormLabel>Qty</FormLabel>
-                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
-                      1
-                    </div>
+                <div className="space-y-2">
+                  <FormLabel>Net</FormLabel>
+                  <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                    {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
-                  <div className="space-y-2">
-                    <FormLabel>Unit Price</FormLabel>
-                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
-                      {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <FormLabel>VAT</FormLabel>
-                    <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
-                      Standard
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <FormLabel>Net</FormLabel>
-                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
-                      {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <FormLabel>Gross</FormLabel>
-                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm font-medium">
-                      {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
+                </div>
+                <div className="space-y-2">
+                  <FormLabel>Gross</FormLabel>
+                  <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm font-medium">
+                    {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
-              
-              <div className="flex flex-col items-end space-y-2 pt-4">
-                <div className="w-full max-w-xs flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total Net</span>
-                    <span>{finalExVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-                <div className="w-full max-w-xs flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total VAT</span>
-                    <span>{finalVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-                <Separator className="max-w-xs" />
-                <div className="w-full max-w-xs flex justify-between text-lg font-bold">
-                    <span>Total Gross</span>
-                    <span>{finalIncVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
+            </div>
+            
+            <div className="flex flex-col items-end space-y-2 pt-4">
+              <div className="w-full max-w-xs flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total Net</span>
+                  <span>{finalExVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-
-              <Separator />
-              <h3 className="text-lg font-medium">Payment</h3>
-                <FormField control={form.control} name="paymentMethod" render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>Payment Method</FormLabel>
-                    <FormControl>
-                      <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="grid grid-cols-2 gap-4">
-                        <FormItem>
-                            <FormControl><RadioGroupItem value="BankTransfer" id="r1" className="peer sr-only" /></FormControl>
-                            <Label htmlFor="r1" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                Bank Transfer <span className="text-xs text-muted-foreground">(0% Fee)</span>
-                            </Label>
-                        </FormItem>
-                        <FormItem>
-                            <FormControl><RadioGroupItem value="Escrow" id="r2" className="peer sr-only" /></FormControl>
-                             <Label htmlFor="r2" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                Escrow <span className="text-xs text-muted-foreground">(1% Fee)</span>
-                             </Label>
-                        </FormItem>
-                        <FormItem>
-                            <FormControl><RadioGroupItem value="Crypto" id="r3" className="peer sr-only" /></FormControl>
-                             <Label htmlFor="r3" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                                Crypto <span className="text-xs text-muted-foreground">(3% Fee)</span>
-                             </Label>
-                        </FormItem>
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <Separator />
-              <h3 className="text-lg font-medium">Trade Finance</h3>
-              <FormField
-                control={form.control}
-                name="tradeFinanceOption"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormControl>
-                      <RadioGroup
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                        className="grid grid-cols-2 gap-4"
-                      >
-                        <FormItem>
-                          <FormControl>
-                            <RadioGroupItem
-                              value="None"
-                              id="tf-none"
-                              className="peer sr-only"
-                            />
-                          </FormControl>
-                          <Label
-                            htmlFor="tf-none"
-                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                          >
-                            None
-                             <span className="text-xs text-muted-foreground">(0% Fee)</span>
-                          </Label>
-                        </FormItem>
-                        <FormItem>
-                          <FormControl>
-                            <RadioGroupItem
-                              value="14Days"
-                              id="tf-14"
-                              className="peer sr-only"
-                              disabled={!selectedBuyer?.rate14day}
-                            />
-                          </FormControl>
-                          <Label
-                            htmlFor="tf-14"
-                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
-                          >
-                            14 Days
-                            <span className="text-xs text-muted-foreground">
-                                ({selectedBuyer?.rate14day ?? 0}% Fee)
-                            </span>
-                          </Label>
-                        </FormItem>
-                        <FormItem>
-                          <FormControl>
-                            <RadioGroupItem
-                              value="30Days"
-                              id="tf-30"
-                              className="peer sr-only"
-                              disabled={!selectedBuyer?.rate30day}
-                            />
-                          </FormControl>
-                          <Label
-                            htmlFor="tf-30"
-                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
-                          >
-                            30 Days
-                            <span className="text-xs text-muted-foreground">
-                                ({selectedBuyer?.rate30day ?? 0}% Fee)
-                            </span>
-                          </Label>
-                        </FormItem>
-                        <FormItem>
-                          <FormControl>
-                            <RadioGroupItem
-                              value="60Days"
-                              id="tf-60"
-                              className="peer sr-only"
-                              disabled={!selectedBuyer?.rate60day}
-                            />
-                          </FormControl>
-                          <Label
-                            htmlFor="tf-60"
-                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
-                          >
-                            60 Days
-                            <span className="text-xs text-muted-foreground">
-                                ({selectedBuyer?.rate60day ?? 0}% Fee)
-                            </span>
-                          </Label>
-                        </FormItem>
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="w-full max-w-xs flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total VAT</span>
+                  <span>{finalVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <Separator className="max-w-xs" />
+              <div className="w-full max-w-xs flex justify-between text-lg font-bold">
+                  <span>Total Gross</span>
+                  <span>{finalIncVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
             </div>
-          </ScrollArea>
-          <SheetFooter className="p-6 bg-background border-t w-full flex-shrink-0">
-            <div className="flex justify-end w-full">
-                <Button type="submit" disabled={isLoading} size="lg">
-                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Create Draft Order
-                </Button>
-            </div>
-          </SheetFooter>
-        </form>
-      </Form>
+
+            <Separator />
+            <h3 className="text-lg font-medium">Payment</h3>
+              <FormField control={form.control} name="paymentMethod" render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <FormLabel>Payment Method</FormLabel>
+                  <FormControl>
+                    <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="grid grid-cols-2 gap-4">
+                      <FormItem>
+                          <FormControl><RadioGroupItem value="BankTransfer" id="r1" className="peer sr-only" /></FormControl>
+                          <Label htmlFor="r1" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
+                              Bank Transfer <span className="text-xs text-muted-foreground">(0% Fee)</span>
+                          </Label>
+                      </FormItem>
+                      <FormItem>
+                          <FormControl><RadioGroupItem value="Escrow" id="r2" className="peer sr-only" /></FormControl>
+                           <Label htmlFor="r2" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
+                              Escrow <span className="text-xs text-muted-foreground">(1% Fee)</span>
+                           </Label>
+                      </FormItem>
+                      <FormItem>
+                          <FormControl><RadioGroupItem value="Crypto" id="r3" className="peer sr-only" /></FormControl>
+                           <Label htmlFor="r3" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
+                              Crypto <span className="text-xs text-muted-foreground">(3% Fee)</span>
+                           </Label>
+                      </FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Separator />
+            <h3 className="text-lg font-medium">Trade Finance</h3>
+            <FormField
+              control={form.control}
+              name="tradeFinanceOption"
+              render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <FormControl>
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                      className="grid grid-cols-2 gap-4"
+                    >
+                      <FormItem>
+                        <FormControl>
+                          <RadioGroupItem
+                            value="None"
+                            id="tf-none"
+                            className="peer sr-only"
+                          />
+                        </FormControl>
+                        <Label
+                          htmlFor="tf-none"
+                          className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                        >
+                          None
+                           <span className="text-xs text-muted-foreground">(0% Fee)</span>
+                        </Label>
+                      </FormItem>
+                      <FormItem>
+                        <FormControl>
+                          <RadioGroupItem
+                            value="14Days"
+                            id="tf-14"
+                            className="peer sr-only"
+                            disabled={!selectedBuyer?.rate14day}
+                          />
+                        </FormControl>
+                        <Label
+                          htmlFor="tf-14"
+                          className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
+                        >
+                          14 Days
+                          <span className="text-xs text-muted-foreground">
+                              ({selectedBuyer?.rate14day ?? 0}% Fee)
+                          </span>
+                        </Label>
+                      </FormItem>
+                      <FormItem>
+                        <FormControl>
+                          <RadioGroupItem
+                            value="30Days"
+                            id="tf-30"
+                            className="peer sr-only"
+                            disabled={!selectedBuyer?.rate30day}
+                          />
+                        </FormControl>
+                        <Label
+                          htmlFor="tf-30"
+                          className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
+                        >
+                          30 Days
+                          <span className="text-xs text-muted-foreground">
+                              ({selectedBuyer?.rate30day ?? 0}% Fee)
+                          </span>
+                        </Label>
+                      </FormItem>
+                      <FormItem>
+                        <FormControl>
+                          <RadioGroupItem
+                            value="60Days"
+                            id="tf-60"
+                            className="peer sr-only"
+                            disabled={!selectedBuyer?.rate60day}
+                          />
+                        </FormControl>
+                        <Label
+                          htmlFor="tf-60"
+                          className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
+                        >
+                          60 Days
+                          <span className="text-xs text-muted-foreground">
+                              ({selectedBuyer?.rate60day ?? 0}% Fee)
+                          </span>
+                        </Label>
+                      </FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </form>
+        </Form>
+      </div>
+
+      <SheetFooter className="p-6 bg-background border-t w-full flex-shrink-0">
+        <div className="flex justify-end w-full">
+            <Button type="submit" form="order-booking-form" disabled={isLoading} size="lg">
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create Draft Order
+            </Button>
+        </div>
+      </SheetFooter>
     </div>
   );
 }
-
-    
