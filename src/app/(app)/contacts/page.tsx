@@ -7,13 +7,11 @@ import {
   query,
   where,
   onSnapshot,
-  getDocs,
-  doc,
-  documentId,
 } from "firebase/firestore";
 import { useAuth } from "@/context/auth-context";
 import { firestore } from "@/lib/firebase";
-import type { Company, Contact, PopulatedContact } from "@/types";
+import type { PopulatedContact } from "@/types";
+import { useToast } from "@/hooks/use-toast";
 
 import {
   Card,
@@ -35,6 +33,7 @@ import Loading from "./loading";
 
 export default function ContactsPage() {
   const { userData } = useAuth();
+  const { toast } = useToast();
   const [contacts, setContacts] = useState<PopulatedContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -61,51 +60,10 @@ export default function ContactsPage() {
       where("status", "==", "Connected")
     );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const connectedContacts = snapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() } as Contact)
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const populatedContacts = snapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as PopulatedContact)
       );
-      
-      const partnerCompanyIds = connectedContacts
-        .map((c) =>
-          c.companyAId === companyId ? c.companyBId : c.companyAId
-        )
-        .filter((id): id is string => !!id);
-
-      let companiesMap = new Map<string, Company>();
-
-      if (partnerCompanyIds.length > 0) {
-        const uniquePartnerIds = [...new Set(partnerCompanyIds)];
-        const companiesQuery = query(
-          collection(firestore!, "companies"),
-          where(documentId(), "in", uniquePartnerIds)
-        );
-        const companiesSnapshot = await getDocs(companiesQuery);
-        companiesSnapshot.forEach((doc) => {
-          companiesMap.set(doc.id, { id: doc.id, ...doc.data() } as Company);
-        });
-      }
-
-      const populatedContacts: PopulatedContact[] = connectedContacts
-        .map((contact) => {
-          const partnerId =
-            contact.companyAId === companyId
-              ? contact.companyBId
-              : contact.companyAId;
-          if (!partnerId) return null;
-
-          const partnerCompany = companiesMap.get(partnerId);
-          if (!partnerCompany) return null;
-
-          return {
-            id: contact.id,
-            status: contact.status,
-            relationship: contact.relationship,
-            createdAt: contact.createdAt,
-            partnerCompany,
-          };
-        })
-        .filter((c): c is PopulatedContact => c !== null);
       
       // Safer sorting
       populatedContacts.sort((a,b) => {
@@ -118,11 +76,16 @@ export default function ContactsPage() {
       setIsLoading(false);
     }, (error) => {
         console.error("Error fetching contacts:", error);
+        toast({
+            variant: "destructive",
+            title: "Error fetching contacts",
+            description: error.message,
+        });
         setIsLoading(false);
     });
 
     return unsubscribe;
-  }, [userData?.companyId]);
+  }, [userData?.companyId, toast]);
 
   useEffect(() => {
     const unsubscribePromise = fetchContacts();

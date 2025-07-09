@@ -67,6 +67,8 @@ export interface Contact {
   };
 }
 
+// This is the simplified data structure the page will now use.
+// It assumes the partner company's details are stored directly on the contact.
 export interface PopulatedContact {
   id: string;
   status: ContactStatus;
@@ -74,7 +76,12 @@ export interface PopulatedContact {
     buyer: boolean;
     seller: boolean;
   };
-  partnerCompany: Company;
+  // The partner company object now represents the denormalized data
+  partnerCompany: {
+    id: string;
+    name: string;
+    country: string;
+  };
   createdAt: Timestamp;
 }
 
