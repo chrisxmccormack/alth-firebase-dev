@@ -89,10 +89,12 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
 
   const paymentMethod = useWatch({ control: form.control, name: "paymentMethod" });
   const platformFeePct = getPlatformFeePct(paymentMethod as any);
-  const platformFeeAmount = productTotals.exVat * (platformFeePct / 100);
+  
+  const platformFeeExVat = productTotals.exVat * (platformFeePct / 100);
+  const platformFeeIncVat = platformFeeExVat * 1.20;
 
-  const finalExVatTotal = productTotals.exVat + platformFeeAmount;
-  const finalIncVatTotal = productTotals.incVat + platformFeeAmount;
+  const finalExVatTotal = productTotals.exVat + platformFeeExVat;
+  const finalIncVatTotal = productTotals.incVat + platformFeeIncVat;
 
 
   const fetchBuyers = useCallback(async () => {
@@ -181,6 +183,17 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
               <Separator />
               <h3 className="text-lg font-medium">Order Lines</h3>
               <div className="space-y-4">
+                <div className="grid grid-cols-12 gap-2 items-start px-2 -mb-3">
+                  <div className="col-span-11 grid grid-cols-12 gap-x-2">
+                      <div className="col-span-12"><Label>Product Name</Label></div>
+                      <div className="col-span-2"><Label>Qty</Label></div>
+                      <div className="col-span-2"><Label>Unit Price</Label></div>
+                      <div className="col-span-3"><Label>VAT</Label></div>
+                      <div className="col-span-2"><Label>Net Amount</Label></div>
+                      <div className="col-span-3"><Label>Gross Amount</Label></div>
+                  </div>
+                </div>
+
                 {fields.map((field, index) => {
                   const line = watchedLines[index];
                   const qty = Number(line?.qty) || 0;
@@ -193,28 +206,28 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                        <div className="col-span-11 grid grid-cols-12 gap-x-2 gap-y-1">
                           <FormField control={form.control} name={`lines.${index}.productName`} render={({ field }) => (
                               <FormItem className="col-span-12">
-                                 <FormLabel className={index !== 0 ? 'sr-only' : ''}>Product Name</FormLabel>
+                                 <FormLabel className="sr-only">Product Name</FormLabel>
                                  <FormControl><Input placeholder="Product Description" {...field} /></FormControl>
                                  <FormMessage />
                               </FormItem>
                            )}/>
                           <FormField control={form.control} name={`lines.${index}.qty`} render={({ field }) => (
                              <FormItem className="col-span-2">
-                                <FormLabel className={index !== 0 ? 'sr-only' : ''}>Qty</FormLabel>
+                                <FormLabel className="sr-only">Qty</FormLabel>
                                 <FormControl><Input type="number" placeholder="1" {...field} /></FormControl>
                                 <FormMessage />
                              </FormItem>
                           )}/>
                           <FormField control={form.control} name={`lines.${index}.unitPrice`} render={({ field }) => (
                              <FormItem className="col-span-2">
-                                <FormLabel className={index !== 0 ? 'sr-only' : ''}>Unit Price</FormLabel>
+                                <FormLabel className="sr-only">Unit Price</FormLabel>
                                 <FormControl><Input type="number" step="0.01" placeholder="100.00" {...field} /></FormControl>
                                 <FormMessage />
                              </FormItem>
                           )}/>
                            <FormField control={form.control} name={`lines.${index}.vatTreatment`} render={({ field }) => (
                              <FormItem className="col-span-3">
-                                <FormLabel className={index !== 0 ? 'sr-only' : ''}>VAT</FormLabel>
+                                <FormLabel className="sr-only">VAT</FormLabel>
                                  <Select onValueChange={field.onChange} defaultValue={field.value}>
                                       <FormControl><SelectTrigger><SelectValue placeholder="VAT" /></SelectTrigger></FormControl>
                                       <SelectContent>
@@ -227,13 +240,13 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                              </FormItem>
                           )}/>
                           <div className="col-span-2">
-                            <FormLabel className={index !== 0 ? 'sr-only' : ''}>Net Amount</FormLabel>
+                            <FormLabel className="sr-only">Net Amount</FormLabel>
                             <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm">
                               {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </div>
                           <div className="col-span-3">
-                            <FormLabel className={index !== 0 ? 'sr-only' : ''}>Gross Amount</FormLabel>
+                            <FormLabel className="sr-only">Gross Amount</FormLabel>
                             <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm font-medium">
                               {grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
@@ -263,20 +276,20 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                         </div>
                         <div className="col-span-2">
                             <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
-                                {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
                         <div className="col-span-3">
-                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">Exempt</div>
+                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">Standard</div>
                         </div>
                         <div className="col-span-2">
                             <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
-                                {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
                         <div className="col-span-3">
                             <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">
-                                {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                         </div>
                     </div>
