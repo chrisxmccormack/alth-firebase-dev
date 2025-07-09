@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -87,9 +87,14 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
   });
 
   const watchedLines = useWatch({ control: form.control, name: "lines" });
-  const productTotals = calculateTotals(watchedLines.map(l => ({...l, amountExVat: 0, amountIncVat: 0})));
-
   const paymentMethod = useWatch({ control: form.control, name: "paymentMethod" });
+  const watchedBuyerId = useWatch({ control: form.control, name: "buyerCompanyId" });
+
+  const selectedBuyer = useMemo(() => {
+    return buyers.find(b => b.id === watchedBuyerId);
+  }, [buyers, watchedBuyerId]);
+
+  const productTotals = calculateTotals(watchedLines.map(l => ({...l, amountExVat: 0, amountIncVat: 0})));
   const platformFeePct = getPlatformFeePct(paymentMethod as any);
   
   const platformFeeExVat = productTotals.exVat * (platformFeePct / 100);
@@ -298,7 +303,6 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                         </div>
                     </div>
                     <div className="col-span-1 flex justify-end">
-                        {/* Empty div for alignment, as there's no delete button */}
                     </div>
                 </div>
                 
@@ -378,6 +382,7 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                             className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
                           >
                             None
+                             <span className="text-xs text-muted-foreground">(0% Fee)</span>
                           </Label>
                         </FormItem>
                         <FormItem>
@@ -386,13 +391,17 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                               value="14Days"
                               id="tf-14"
                               className="peer sr-only"
+                              disabled={!selectedBuyer?.rate14day}
                             />
                           </FormControl>
                           <Label
                             htmlFor="tf-14"
-                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
                           >
                             14 Days
+                            <span className="text-xs text-muted-foreground">
+                                ({selectedBuyer?.rate14day ?? 0}% Fee)
+                            </span>
                           </Label>
                         </FormItem>
                         <FormItem>
@@ -401,13 +410,17 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                               value="30Days"
                               id="tf-30"
                               className="peer sr-only"
+                              disabled={!selectedBuyer?.rate30day}
                             />
                           </FormControl>
                           <Label
                             htmlFor="tf-30"
-                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
                           >
                             30 Days
+                            <span className="text-xs text-muted-foreground">
+                                ({selectedBuyer?.rate30day ?? 0}% Fee)
+                            </span>
                           </Label>
                         </FormItem>
                         <FormItem>
@@ -416,13 +429,17 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                               value="60Days"
                               id="tf-60"
                               className="peer sr-only"
+                              disabled={!selectedBuyer?.rate60day}
                             />
                           </FormControl>
                           <Label
                             htmlFor="tf-60"
-                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                            className="flex flex-col items-center justify-center rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"
                           >
                             60 Days
+                            <span className="text-xs text-muted-foreground">
+                                ({selectedBuyer?.rate60day ?? 0}% Fee)
+                            </span>
                           </Label>
                         </FormItem>
                       </RadioGroup>
