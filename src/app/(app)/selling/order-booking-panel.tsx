@@ -101,16 +101,23 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
     const basePlatformFee = productTotals.exVat * (baseFeePct / 100);
 
     let tradeFinanceFee = 0;
-    if (tradeFinanceOption === '14Days') {
-      const rate = selectedBuyer?.rate14day;
-      // Also check product total is positive to avoid calculating a fee on nothing
-      if (rate && rate > 0 && rate < 100 && productTotals.exVat > 0) {
-        const rateDecimal = rate / 100;
-        // The fee is the difference between the grossed-up amount and the original product amount
-        tradeFinanceFee = (productTotals.exVat / (1 - rateDecimal)) - productTotals.exVat;
-      }
+    if (tradeFinanceOption !== 'None') {
+        let rate: number | undefined;
+        if (tradeFinanceOption === '14Days') {
+            rate = selectedBuyer?.rate14day;
+        } else if (tradeFinanceOption === '30Days') {
+            rate = selectedBuyer?.rate30day;
+        } else if (tradeFinanceOption === '60Days') {
+            rate = selectedBuyer?.rate60day;
+        }
+
+        // Also check product total is positive to avoid calculating a fee on nothing
+        if (rate && rate > 0 && rate < 100 && productTotals.exVat > 0) {
+            const rateDecimal = rate / 100;
+            // The fee is the difference between the grossed-up amount and the original product amount
+            tradeFinanceFee = (productTotals.exVat / (1 - rateDecimal)) - productTotals.exVat;
+        }
     }
-    // Note: Future logic for 30/60 days will go here.
 
     const calculatedFeeExVat = basePlatformFee + tradeFinanceFee;
 
