@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import type { PopulatedOrder } from "@/types";
 import {
   Table,
@@ -100,7 +101,9 @@ const ActionCell = ({ order, role }: { order: PopulatedOrder, role: "seller" | "
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    <DropdownMenuItem>Show</DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/invoice/${order.id}`} target="_blank" rel="noopener noreferrer">Show</Link>
+                    </DropdownMenuItem>
                     <DropdownMenuItem>Send</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     {order.status === 'Agreed' && <DropdownMenuItem onClick={() => handleUpdateStatus('Paid')}>Mark as Paid</DropdownMenuItem>}
