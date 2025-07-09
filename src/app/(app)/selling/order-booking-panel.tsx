@@ -248,44 +248,43 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                   );
                 })}
                  <FormMessage>{form.formState.errors.lines?.message}</FormMessage>
-
-                 {platformFeeAmount > 0 && (
-                  <div className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md bg-muted/50">
-                      <div className="col-span-11 grid grid-cols-12 gap-x-2 gap-y-1">
-                          <div className="col-span-12">
-                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">Platform Fee</div>
-                          </div>
-                          <div className="col-span-2">
-                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">1</div>
-                          </div>
-                          <div className="col-span-2">
-                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
-                                  {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
-                          </div>
-                          <div className="col-span-3">
-                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">Exempt</div>
-                          </div>
-                          <div className="col-span-2">
-                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
-                                  {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
-                          </div>
-                          <div className="col-span-3">
-                              <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">
-                                  {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </div>
-                          </div>
-                      </div>
-                      <div className="col-span-1 flex justify-end">
-                          {/* Empty div for alignment, as there's no delete button */}
-                      </div>
-                  </div>
-                )}
-
+                
                 <Button type="button" variant="outline" size="sm" onClick={() => append({ productName: "", qty: 1, unitPrice: 0, vatTreatment: 'Standard' })}>
                   Add Line
                 </Button>
+
+                <div className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md bg-muted/50">
+                    <div className="col-span-11 grid grid-cols-12 gap-x-2 gap-y-1">
+                        <div className="col-span-12">
+                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">Platform Fee</div>
+                        </div>
+                        <div className="col-span-2">
+                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">1</div>
+                        </div>
+                        <div className="col-span-2">
+                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
+                                {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                        </div>
+                        <div className="col-span-3">
+                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">Exempt</div>
+                        </div>
+                        <div className="col-span-2">
+                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">
+                                {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                        </div>
+                        <div className="col-span-3">
+                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">
+                                {platformFeeAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                        {/* Empty div for alignment, as there's no delete button */}
+                    </div>
+                </div>
+
               </div>
 
               <Separator />
