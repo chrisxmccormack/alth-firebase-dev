@@ -222,13 +222,13 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                           <div className="col-span-2">
                             <FormLabel className={index !== 0 ? 'sr-only' : ''}>Net Amount</FormLabel>
                             <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm">
-                              {netAmount.toFixed(2)}
+                              {netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </div>
                           <div className="col-span-3">
                             <FormLabel className={index !== 0 ? 'sr-only' : ''}>Gross Amount</FormLabel>
                             <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm font-medium">
-                              {grossAmount.toFixed(2)}
+                              {grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </div>
                        </div>
@@ -289,8 +289,8 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
           <SheetFooter className="p-6 bg-background border-t w-full">
             <div className="flex justify-between items-center w-full">
                 <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Total (ex. VAT): {totals.exVat.toFixed(2)}</p>
-                    <p className="text-lg font-bold">Total (inc. VAT): {totals.incVat.toFixed(2)}</p>
+                    <p className="text-sm text-muted-foreground">Total (ex. VAT): {totals.exVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-lg font-bold">Total (inc. VAT): {totals.incVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
                 <Button type="submit" disabled={isLoading} size="lg">
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
