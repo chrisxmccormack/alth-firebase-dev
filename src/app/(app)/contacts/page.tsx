@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -56,16 +57,14 @@ export default function ContactsPage() {
 
     const q = query(
       collection(firestore!, "contacts"),
-      where("members", "array-contains", companyId)
+      where("members", "array-contains", companyId),
+      where("status", "==", "Connected")
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const userContacts = snapshot.docs.map(
+      const connectedContacts = snapshot.docs.map(
         (doc) => ({ id: doc.id, ...doc.data() } as Contact)
       );
-
-      const connectedContacts = userContacts.filter(c => c.status === 'Connected');
-      const unverifiedContacts = userContacts.filter(c => c.status === 'Unverified');
       
       const partnerCompanyIds = connectedContacts
         .map((c) =>
@@ -87,7 +86,7 @@ export default function ContactsPage() {
         });
       }
 
-      const populatedConnectedContacts: PopulatedContact[] = connectedContacts
+      const populatedContacts: PopulatedContact[] = connectedContacts
         .map((contact) => {
           const partnerId =
             contact.companyAId === companyId
@@ -107,35 +106,10 @@ export default function ContactsPage() {
           };
         })
         .filter((c): c is PopulatedContact => c !== null);
-
-        const populatedUnverifiedContacts: PopulatedContact[] = unverifiedContacts
-        .map(contact => {
-          if (!contact.partnerCompanyDetails) return null;
-          // Construct a Company-like object from the embedded details
-          const partnerCompany: Company = {
-            id: contact.id, // Use contact ID as a unique key for the row
-            name: contact.partnerCompanyDetails.name,
-            country: contact.partnerCompanyDetails.country,
-            addressLine1: contact.partnerCompanyDetails.addressLine1,
-            city: contact.partnerCompanyDetails.city,
-            postcode: contact.partnerCompanyDetails.postcode,
-            status: 'Approved', // Dummy status, not a real company
-            createdAt: contact.createdAt,
-          };
-          return {
-            id: contact.id,
-            status: contact.status,
-            relationship: contact.relationship,
-            createdAt: contact.createdAt,
-            partnerCompany,
-          };
-        })
-        .filter((c): c is PopulatedContact => c !== null);
       
-      const allContacts = [...populatedConnectedContacts, ...populatedUnverifiedContacts];
-      allContacts.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+      populatedContacts.sort((a,b) => b.createdAt.toMillis() - a.createdAt.toMillis());
 
-      setContacts(allContacts);
+      setContacts(populatedContacts);
       setIsLoading(false);
     }, (error) => {
         console.error("Error fetching contacts:", error);
@@ -183,7 +157,6 @@ export default function ContactsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Company Name</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Relationship</TableHead>
                   <TableHead>Country</TableHead>
                   <TableHead>Connected On</TableHead>
@@ -194,9 +167,6 @@ export default function ContactsPage() {
                   <TableRow key={contact.id}>
                     <TableCell className="font-medium">
                       {contact.partnerCompany.name}
-                    </TableCell>
-                     <TableCell>
-                      <Badge variant={contact.status === 'Connected' ? 'secondary' : 'outline'}>{contact.status}</Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{getRelationshipType(contact)}</Badge>
