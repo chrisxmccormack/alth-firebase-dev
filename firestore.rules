@@ -1,72 +1,76 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    function isApprovedUser() {
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             userDoc.data.get('companyIsApproved', false) == true;
+    // --- HELPERS ---
+    function isSystemAdmin() {
+      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
-    
+
     function isSignedIn() {
       return request.auth != null;
     }
+    
+    function getUserData() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
 
-    function isAdmin() {
-      // IMPORTANT: Replace with your actual System Admin UID
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+    function isApprovedUser() {
+      // Safely reads the user's approval status from their Firestore document.
+      let userData = getUserData();
+      return userData != null && userData.get('companyIsApproved', false) == true;
     }
     
-    // USERS
+    // --- USERS ---
     match /users/{userId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if (isAdmin() && 'companyIsApproved' in request.resource.data) || 
-                       (isSignedIn() && request.auth.uid == userId && 'companyId' in request.resource.data);
-    }
-
-    // COMPANIES
-    match /companies/{companyId} {
-      // Allow any signed-in user to read company data. This is needed to resolve company names in various parts of the UI (e.g., invites, orders).
-      // The crucial data is protected by other rules.
-      allow read: if isSignedIn();
+      allow read, update: if request.auth.uid == userId;
       allow create: if isSignedIn();
-      allow update: if isAdmin();
     }
     
-    // CONTACTS
-    match /contacts/{contactId} {
-      allow read: if isApprovedUser() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members;
-
-      allow create: if (
-        // Case 1: Creating a "Pending" contact (invite link). Must be an approved user.
-        request.resource.data.status == 'Pending' &&
-        isApprovedUser() &&
-        request.resource.data.companyAId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
-      ) || (
-        // Case 2: Creating an "Unverified" contact (direct create). Only needs to be signed in.
-        request.resource.data.status == 'Unverified' &&
-        isSignedIn() &&
-        request.resource.data.ownerUid == request.auth.uid
-      );
-      
-      allow update: if (
-        // Case for accepting an invite
-        isApprovedUser() &&
-        resource.data.status == 'Pending' && 
-        request.resource.data.status == 'Connected' &&
-        request.resource.data.companyBId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId &&
-        !('inviteToken' in request.resource.data) // ensure token is removed
-      );
+    // --- COMPANIES ---
+    match /companies/{companyId} {
+      allow read: if isSystemAdmin() || isApprovedUser() || 
+                    (isSignedIn() && request.auth.uid == resource.data.ownerUid);
+      allow create: if isSignedIn();
+      allow update: if isSystemAdmin();
     }
+    
+    // --- CONTACTS ---
+    match /contacts/{contactId} {
+      // GET: Can get a single doc if you are an approved member.
+      allow get: if isApprovedUser() && resource.data.members.hasAny([getUserData().companyId]);
+      
+      // LIST: Can list contacts if you are an approved user.
+      // The client query MUST be constrained with .where('members', 'array-contains', ...)
+      allow list: if isApprovedUser();
+      
+      // CREATE: 
+      // 1. Creating an invite link ("Pending") requires approval.
+      // 2. Creating a manual contact ("Unverified") requires ownership.
+      allow create: if isSignedIn() &&
+                      ( (request.resource.data.status == 'Pending' && isApprovedUser()) ||
+                        (request.resource.data.status == 'Unverified' && request.resource.data.ownerUid == request.auth.uid) );
 
-    // ORDERS
+      // UPDATE: To accept an invite ("Connected"), you must be an approved user.
+      allow update: if isApprovedUser() && request.resource.data.status == 'Connected';
+    }
+    
+    // --- ORDERS ---
     match /orders/{orderId} {
-        allow read: if isApprovedUser() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members;
-        allow create: if isApprovedUser() && request.resource.data.sellerCompanyId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId;
-        allow update: if isApprovedUser() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId in resource.data.members;
+      // GET: Can get a single doc if you are an approved member.
+      allow get: if isApprovedUser() && resource.data.members.hasAny([getUserData().companyId]);
+      
+      // LIST: Can list orders if you are an approved user.
+      // The client query MUST be constrained with .where('members', 'array-contains', ...)
+      allow list: if isApprovedUser();
+
+      // CREATE: An approved user can create an order if they are a member of it.
+      allow create: if isApprovedUser() && request.resource.data.members.hasAny([getUserData().companyId]);
+
+      // UPDATE: An approved member can update an order, but cannot change the members list.
+      allow update: if isApprovedUser() && resource.data.members.hasAny([getUserData().companyId])
+                      && request.resource.data.members == resource.data.members;
     }
   }
 }
