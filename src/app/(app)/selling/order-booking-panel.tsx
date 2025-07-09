@@ -296,35 +296,46 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                   Add Line
                 </Button>
 
-                <div className="grid grid-cols-12 gap-2 items-start p-2 border rounded-md bg-muted/50">
-                    <div className="col-span-11 grid grid-cols-12 gap-x-2 gap-y-1">
-                        <div className="col-span-4">
-                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm font-medium">Platform Fee</div>
-                        </div>
-                        <div className="col-span-1">
-                            <div className="flex h-10 w-full items-center justify-center rounded-md border-input bg-background px-3 py-2 text-sm">1</div>
-                        </div>
-                        <div className="col-span-2">
-                            <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-background px-3 py-2 text-sm">
-                                {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                        </div>
-                        <div className="col-span-2">
-                            <div className="flex h-10 w-full items-center rounded-md border-input bg-background px-3 py-2 text-sm">Standard</div>
-                        </div>
-                        <div className="col-span-1">
-                            <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-background px-3 py-2 text-sm">
-                                {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                        </div>
-                        <div className="col-span-2">
-                            <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-background px-3 py-2 text-sm font-medium">
-                                {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
-                        </div>
+                <div className="space-y-4 rounded-md border p-4">
+                  <div>
+                    <Label>Product Name</Label>
+                    <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
+                      Platform Fee
                     </div>
-                    <div className="col-span-1 flex justify-end">
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="space-y-2">
+                      <Label>Qty</Label>
+                      <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                        1
+                      </div>
                     </div>
+                    <div className="space-y-2">
+                      <Label>Unit Price</Label>
+                      <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                        {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>VAT</Label>
+                      <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
+                        Standard
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Net</Label>
+                      <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                        {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Gross</Label>
+                      <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm font-medium">
+                        {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
                 <div className="flex flex-col items-end space-y-2 pt-4">
