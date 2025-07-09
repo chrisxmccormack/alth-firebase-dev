@@ -18,7 +18,6 @@ export default function Loading() {
             <Skeleton className="h-9 w-48" />
             <Skeleton className="h-5 w-72 mt-2" />
         </div>
-        <Skeleton className="h-10 w-36" />
       </div>
 
       <Card>
@@ -30,21 +29,17 @@ export default function Loading() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead><Skeleton className="h-5 w-32" /></TableHead>
                 <TableHead><Skeleton className="h-5 w-24" /></TableHead>
-                <TableHead><Skeleton className="h-5 w-24" /></TableHead>
-                <TableHead><Skeleton className="h-5 w-24" /></TableHead>
-                <TableHead><Skeleton className="h-5 w-24" /></TableHead>
-                <TableHead><Skeleton className="h-5 w-24" /></TableHead>
+                <TableHead><Skeleton className="h-5 w-48" /></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {[...Array(3)].map((_, i) => (
+              {[...Array(5)].map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-28 rounded-full" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-28 rounded-full" /></TableCell>
+                  <TableCell><Skeleton className="h-5 w-40" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-5 w-52" /></TableCell>
                 </TableRow>
               ))}
             </TableBody>

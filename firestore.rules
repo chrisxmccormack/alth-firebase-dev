@@ -3,65 +3,56 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ---- Helper Functions ----
-    function isUserAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isCompanyOwner(companyDoc) {
-      return request.auth.uid == companyDoc.data.ownerUid;
+  
+    // --- Helper Functions ---
+    
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
     }
     
-    function isSystemAdmin() {
-      return request.auth.uid == 'YOUR_ADMIN_UID_HERE';
-    }
-
-    function isMemberOf(doc) {
-      // To check membership, we must get the user's companyId from the users collection
-      let userCompanyId = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId;
-      return userCompanyId in doc.data.members;
+    function isApprovedUser(userId) {
+      let userData = getUserData(userId);
+      // Safely access companyIsApproved, default to false if it doesn't exist
+      return userData.companyIsApproved == true;
     }
     
-    // ---- User Rules ----
+    function isUserCompanyMember(userId, companyId) {
+       let userData = getUserData(userId);
+       return userData.companyId == companyId;
+    }
+    
+    // --- Users Collection ---
+    // Users can only read and update their own user document.
+    // New user documents are created via a server-side action (register page).
     match /users/{userId} {
-      allow read, update, delete: if request.auth.uid == userId;
-      allow create: if isUserAuthenticated();
-    }
-
-    // ---- Company Rules ----
-    match /companies/{companyId} {
-      allow read: if isUserAuthenticated();
-      allow create: if isUserAuthenticated();
-      
-      // Only the system admin can approve companies. Owners can update their own company details.
-      allow update: if isSystemAdmin() || isCompanyOwner(resource);
+      allow read, update: if request.auth.uid == userId;
+      allow create: if false; // Disallow client-side creation
     }
     
-    // ---- Contact Rules ----
-    match /contacts/{contactId} {
-      // You can get a specific contact if you are a member of it.
-      allow get: if isMemberOf(resource);
-
-      // You can list contacts if you are a signed-in user.
-      // The query from the client MUST be trusted to filter by the user's companyId.
-      allow list: if isUserAuthenticated();
-      
-      // You can create/update a contact if you are a member of it.
-      allow create, update: if isMemberOf(request.resource);
+    // --- Companies Collection ---
+    // Anyone can create a company (as part of setup).
+    // Only approved users can read the list of companies.
+    // Updates can only be made by the system admin (for approval) or the company owner.
+    match /companies/{companyId} {
+      allow create: if request.auth != null;
+      allow read: if isApprovedUser(request.auth.uid);
+      allow update: if request.auth.uid == resource.data.ownerUid || 
+                       request.auth.uid == 'YOUR_ADMIN_UID_HERE';
     }
-
-    // ---- Order Rules ----
+    
+    // --- Orders Collection ---
+    // Orders can only be read or listed by approved users.
+    // Detailed read/write access is controlled by checking membership.
     match /orders/{orderId} {
-      // You can get a specific order if you are a member of it.
-       allow get: if isMemberOf(resource);
-
-      // You can list orders if you are a signed-in user.
-      // The query from the client MUST be trusted to filter by the user's companyId.
-      allow list: if isUserAuthenticated();
-      
-      // You can create/update an order if you are a member of it.
-      allow create, update: if isMemberOf(request.resource);
+       allow get: if isApprovedUser(request.auth.uid) && 
+                      isUserCompanyMember(request.auth.uid, resource.data.buyerCompanyId) ||
+                      isUserCompanyMember(request.auth.uid, resource.data.sellerCompanyId);
+                      
+       allow list: if isApprovedUser(request.auth.uid);
+       
+       allow create, update: if isApprovedUser(request.auth.uid) &&
+                                 isUserCompanyMember(request.auth.uid, request.resource.data.sellerCompanyId) ||
+                                 isUserCompanyMember(request.auth.uid, request.resource.data.buyerCompanyId);
     }
   }
 }

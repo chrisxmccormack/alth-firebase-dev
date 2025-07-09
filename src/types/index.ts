@@ -34,57 +34,6 @@ export interface Company {
   ownerLastName?: string;
 }
 
-export type ContactStatus = "Pending" | "Connected" | "Unverified";
-
-export interface Contact {
-  id: string;
-  companyAId: string;
-  companyBId: string | null;
-  members: string[];
-  relationship: {
-    buyer: boolean;
-    seller: boolean;
-  };
-  status: ContactStatus;
-  inviteToken?: string;
-  expiresAt?: Timestamp;
-  createdAt: Timestamp;
-  ownerUid?: string;
-  contactPerson?: {
-    firstName: string;
-    lastName:string;
-    email: string;
-  };
-  partnerCompanyDetails?: {
-    name: string;
-    addressLine1: string;
-    addressLine2?: string;
-    city: string;
-    postcode: string;
-    country: string;
-    vatId?: string;
-    website?: string;
-  };
-}
-
-// This is the simplified data structure the page will now use.
-// It assumes the partner company's details are stored directly on the contact.
-export interface PopulatedContact {
-  id: string;
-  status: ContactStatus;
-  relationship: {
-    buyer: boolean;
-    seller: boolean;
-  };
-  // The partner company object now represents the denormalized data
-  partnerCompany: {
-    id: string;
-    name: string;
-    country: string;
-  };
-  createdAt: Timestamp;
-}
-
 // --- ORDERS ---
 
 export type Currency = "GBP" | "EUR" | "USD";

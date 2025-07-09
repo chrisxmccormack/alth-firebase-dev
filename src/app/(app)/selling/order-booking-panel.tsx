@@ -41,7 +41,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Trash2 } from "lucide-react";
-import type { Company, Contact, PopulatedContact, PaymentMethod, Currency } from "@/types";
+import type { Company } from "@/types";
 
 const orderLineSchema = z.object({
   productName: z.string().min(1, "Product name is required."),
@@ -92,45 +92,17 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
     if (!userData?.companyId) return;
 
     const companyId = userData.companyId;
-    const contactsRef = collection(firestore!, "contacts");
+    const companiesRef = collection(firestore!, "companies");
     
-    // Fetch contacts where the current user's company is involved and the status is connected
+    // Fetch all companies except the current user's own company
     const q = query(
-        contactsRef, 
-        where("members", "array-contains", companyId), 
-        where("status", "==", "Connected")
+        companiesRef, 
+        where(documentId(), "!=", companyId)
     );
-    const contactsSnapshot = await getDocs(q);
-    const contacts = contactsSnapshot.docs.map(d => d.data() as Contact);
+    const companiesSnapshot = await getDocs(q);
+    const companies = companiesSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Company);
     
-    // Filter for contacts where the relationship indicates they are a buyer
-    const buyerContacts = contacts.filter(c => {
-        // If I am companyA, my partner is companyB. The relationship is defined from A's perspective.
-        if (c.companyAId === companyId) {
-            return c.relationship.buyer;
-        }
-        // If I am companyB, my partner is companyA. The relationship is inverse.
-        if (c.companyBId === companyId) {
-            return c.relationship.seller; // If they are a seller to me, I am a buyer to them.
-        }
-        return false;
-    });
-
-    const partnerCompanyIds = [
-        ...new Set(
-            buyerContacts.map(c => 
-                c.companyAId === companyId ? c.companyBId : c.companyAId
-            ).filter(Boolean)
-        )
-    ] as string[];
-
-
-    if (partnerCompanyIds.length > 0) {
-      const companiesQuery = query(collection(firestore!, "companies"), where(documentId(), "in", partnerCompanyIds));
-      const companiesSnapshot = await getDocs(companiesQuery);
-      const companies = companiesSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Company);
-      setBuyers(companies);
-    }
+    setBuyers(companies);
   }, [userData?.companyId]);
 
   useEffect(() => {
