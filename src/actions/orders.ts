@@ -2,7 +2,7 @@
 'use server';
 
 import { firestore } from '@/lib/firebase';
-import { calculateTotals, getPlatformFeePct } from '@/lib/orders';
+import { calculateTotals, getPlatformFeePct, calculateAndAddLineTotals } from '@/lib/orders';
 import {
   collection,
   addDoc,
@@ -12,7 +12,7 @@ import {
   getDoc,
   Timestamp,
 } from 'firebase/firestore';
-import type { Order, OrderStatus, PaymentMethod, OrderLine } from '@/types';
+import type { Order, OrderStatus, PaymentMethod, OrderLine, Company } from '@/types';
 
 // This corresponds to your requested onOrderWrite Cloud Function logic
 const performOrderWriteSideEffects = (
@@ -48,21 +48,62 @@ export async function createOrder(
     buyerCompanyId: string;
     currency: "GBP" | "EUR" | "USD";
     paymentMethod: PaymentMethod;
-    lines: OrderLine[];
+    lines: Omit<OrderLine, 'amountExVat' | 'amountIncVat'>[]; // Raw lines from client
+    tradeFinanceOption: "None" | "14Days" | "30Days" | "60Days";
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // 2. Recalculate totals and platformFeePct on write
-    const totals = calculateTotals(formData.lines);
-    const platformFeePct = getPlatformFeePct(formData.paymentMethod);
+    // 1. Fetch buyer company to get finance rates
+    const buyerCompanyRef = doc(firestore!, "companies", formData.buyerCompanyId);
+    const buyerCompanySnap = await getDoc(buyerCompanyRef);
+    if (!buyerCompanySnap.exists()) {
+      throw new Error("Buyer company not found.");
+    }
+    const buyerCompany = buyerCompanySnap.data() as Company;
+
+    // 2. Recalculate everything on the server for security
+    const processedLines = calculateAndAddLineTotals(formData.lines);
+    const productTotals = calculateTotals(processedLines);
+
+    const baseFeePct = getPlatformFeePct(formData.paymentMethod);
+    const basePlatformFee = productTotals.exVat * (baseFeePct / 100);
+
+    let tradeFinanceFee = 0;
+    if (formData.tradeFinanceOption !== 'None' && productTotals.exVat > 0) {
+      let rate: number | undefined;
+      switch (formData.tradeFinanceOption) {
+        case '14Days': rate = buyerCompany.rate14day; break;
+        case '30Days': rate = buyerCompany.rate30day; break;
+        case '60Days': rate = buyerCompany.rate60day; break;
+      }
+      if (rate && rate > 0 && rate < 100) {
+        const rateDecimal = rate / 100;
+        tradeFinanceFee = (productTotals.exVat / (1 - rateDecimal)) - productTotals.exVat;
+      }
+    }
+
+    const totalFeeExVat = basePlatformFee + tradeFinanceFee;
+    const feeVat = totalFeeExVat * 0.20; // Assuming 20% VAT on fees
+
+    const finalTotals = {
+      exVat: productTotals.exVat + totalFeeExVat,
+      vat: productTotals.vat + feeVat,
+      incVat: productTotals.incVat + totalFeeExVat + feeVat,
+    };
+    
+    // Round all final totals to 2 decimal places
+    Object.keys(finalTotals).forEach(key => {
+        finalTotals[key as keyof typeof finalTotals] = Math.round(finalTotals[key as keyof typeof finalTotals] * 100) / 100;
+    });
 
     const newOrderData = {
       ...formData,
+      lines: processedLines, // Use server-processed lines
       sellerCompanyId,
       members: [sellerCompanyId, formData.buyerCompanyId],
-      totals,
-      platformFeePct,
-      status: 'Draft',
+      totals: finalTotals, // Use server-calculated final totals
+      platformFeePct: baseFeePct,
+      status: 'Draft' as OrderStatus,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };

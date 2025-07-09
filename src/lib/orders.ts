@@ -16,26 +16,40 @@ export function getPlatformFeePct(paymentMethod: PaymentMethod): number {
     }
 }
 
+const VAT_RATE = 0.20;
+
 /**
- * Calculates the total amounts from an array of order lines.
+ * Takes raw order lines and returns them with calculated amounts.
+ */
+export function calculateAndAddLineTotals(lines: Omit<OrderLine, 'amountExVat' | 'amountIncVat'>[]): OrderLine[] {
+    return lines.map(line => {
+        const qty = Number(line.qty) || 0;
+        const unitPrice = Number(line.unitPrice) || 0;
+        const amountExVat = qty * unitPrice;
+        const lineVat = line.vatTreatment === 'Standard' ? amountExVat * VAT_RATE : 0;
+        const amountIncVat = amountExVat + lineVat;
+
+        return {
+            ...line,
+            amountExVat: Math.round(amountExVat * 100) / 100,
+            amountIncVat: Math.round(amountIncVat * 100) / 100
+        };
+    });
+}
+
+
+/**
+ * Calculates the total amounts from an array of processed order lines.
  * Assumes a standard VAT rate of 20% for calculation simplicity.
  */
 export function calculateTotals(lines: OrderLine[]): OrderTotals {
-    const VAT_RATE = 0.20;
-  
     const totals = lines.reduce(
       (acc, line) => {
-        const qty = Number(line.qty) || 0;
-        const unitPrice = Number(line.unitPrice) || 0;
-        const lineTotalExVat = qty * unitPrice;
+        const lineVat = line.vatTreatment === 'Standard' ? line.amountExVat * VAT_RATE : 0;
         
-        // This is a simplified VAT calculation. A real app would have more complex logic.
-        const lineVat = line.vatTreatment === 'Standard' ? lineTotalExVat * VAT_RATE : 0;
-        const lineTotalIncVat = lineTotalExVat + lineVat;
-        
-        acc.exVat += lineTotalExVat;
+        acc.exVat += line.amountExVat;
         acc.vat += lineVat;
-        acc.incVat += lineTotalIncVat;
+        acc.incVat += line.amountIncVat;
         
         return acc;
       },
