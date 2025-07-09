@@ -88,7 +88,7 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
   const productTotals = calculateTotals(watchedLines.map(l => ({...l, amountExVat: 0, amountIncVat: 0})));
 
   const paymentMethod = useWatch({ control: form.control, name: "paymentMethod" });
-  const platformFeePct = getPlatformFeePct(paymentMethod);
+  const platformFeePct = getPlatformFeePct(paymentMethod as any);
   const platformFeeAmount = productTotals.exVat * (platformFeePct / 100);
 
   const finalExVatTotal = productTotals.exVat + platformFeeAmount;
