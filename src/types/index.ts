@@ -54,7 +54,9 @@ export type OrderStatus =
   | "Completed"
   | "InQuery"
   | "Cancelled"
-  | "Disputed";
+  | "Disputed"
+  | "Accepted"
+  | "Rejected";
 
 export interface OrderLine {
   productName: string;

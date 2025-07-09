@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Separator } from '@/components/ui/separator';
 import { AlethiumLogo } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
+import { InvoiceActions } from './invoice-actions';
 
 async function getInvoiceData(orderId: string) {
     // Return null if firebase is not initialized.
@@ -45,6 +46,8 @@ async function getInvoiceData(orderId: string) {
 const statusColors: { [key: string]: string } = {
     Draft: "bg-gray-200 text-gray-800",
     Agreed: "bg-blue-200 text-blue-800",
+    Accepted: "bg-blue-200 text-blue-800",
+    Rejected: "bg-red-200 text-red-800",
     Paid: "bg-green-200 text-green-800",
     Dispatched: "bg-purple-200 text-purple-800",
     Delivered: "bg-indigo-200 text-indigo-800",
@@ -82,9 +85,12 @@ export default async function InvoicePage({ params }: { params: { orderId: strin
                 <Card>
                     <CardHeader className="p-6">
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <AlethiumLogo />
-                                <h1 className="text-3xl font-bold font-headline text-foreground">Invoice</h1>
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3">
+                                    <AlethiumLogo />
+                                    <h1 className="text-3xl font-bold font-headline text-foreground">Invoice</h1>
+                                </div>
+                                <InvoiceActions order={order} />
                             </div>
                             <Badge className={`${statusColors[order.status] || 'bg-gray-200 text-gray-800'}`}>
                                 {order.status}
@@ -176,4 +182,3 @@ export default async function InvoicePage({ params }: { params: { orderId: strin
         </div>
     );
 }
-

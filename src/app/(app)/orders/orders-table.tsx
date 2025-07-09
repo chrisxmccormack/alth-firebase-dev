@@ -40,6 +40,8 @@ interface OrdersTableProps {
 const statusColors: { [key: string]: string } = {
     Draft: "bg-gray-200 text-gray-800",
     Agreed: "bg-blue-200 text-blue-800",
+    Accepted: "bg-blue-200 text-blue-800",
+    Rejected: "bg-red-200 text-red-800",
     Paid: "bg-green-200 text-green-800",
     Dispatched: "bg-purple-200 text-purple-800",
     Delivered: "bg-indigo-200 text-indigo-800",
@@ -91,7 +93,7 @@ const ActionCell = ({ order, role }: { order: PopulatedOrder, role: "seller" | "
     }
 
     const relevantAction = role === 'buyer' ? renderBuyerActions() : renderSellerActions();
-    if (!relevantAction && role === 'seller' && order.status !== 'Completed' && order.status !== 'Cancelled') {
+    if (!relevantAction && role === 'seller' && order.status !== 'Completed' && order.status !== 'Cancelled' && order.status !== 'Rejected') {
         return (
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -106,9 +108,9 @@ const ActionCell = ({ order, role }: { order: PopulatedOrder, role: "seller" | "
                     </DropdownMenuItem>
                     <DropdownMenuItem>Send</DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    {order.status === 'Agreed' && <DropdownMenuItem onClick={() => handleUpdateStatus('Paid')}>Mark as Paid</DropdownMenuItem>}
+                    {(order.status === 'Agreed' || order.status === 'Accepted') && <DropdownMenuItem onClick={() => handleUpdateStatus('Paid')}>Mark as Paid</DropdownMenuItem>}
                     {order.status === 'Paid' && <DropdownMenuItem onClick={() => handleUpdateStatus('Dispatched')}>Mark as Dispatched</DropdownMenuItem>}
-                    {(order.status === 'Draft' || order.status === 'Agreed') && <DropdownMenuItem onClick={() => handleUpdateStatus('Cancelled')}>Cancel Order</DropdownMenuItem>}
+                    {(order.status === 'Draft' || order.status === 'Agreed' || order.status === 'Accepted') && <DropdownMenuItem onClick={() => handleUpdateStatus('Cancelled')}>Cancel Order</DropdownMenuItem>}
                 </DropdownMenuContent>
             </DropdownMenu>
         );

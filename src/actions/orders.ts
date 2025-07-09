@@ -21,8 +21,9 @@ const performOrderWriteSideEffects = (
   ) => {
     // 1. Reject illegal status jumps (This is primarily handled in security rules, but we can double-check here)
     const validTransitions: Partial<Record<OrderStatus, OrderStatus[]>> = {
-      Draft: ['Agreed', 'Cancelled'],
+      Draft: ['Agreed', 'Cancelled', 'Accepted', 'Rejected'],
       Agreed: ['Paid', 'Dispatched', 'Cancelled'],
+      Accepted: ['Paid', 'Dispatched', 'Cancelled'],
       Paid: ['Dispatched'],
       Dispatched: ['Delivered'],
       Delivered: ['Completed', 'Disputed', 'InQuery'],
