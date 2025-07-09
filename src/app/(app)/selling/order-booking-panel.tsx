@@ -146,13 +146,13 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
   };
 
   return (
-    <>
-      <SheetHeader className="p-6">
+    <div className="h-full flex flex-col">
+      <SheetHeader className="p-6 flex-shrink-0">
         <SheetTitle>Add New Order</SheetTitle>
         <SheetDescription>Create a new sales order. It will be saved as a draft.</SheetDescription>
       </SheetHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="h-full flex flex-col">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col overflow-y-hidden">
           <ScrollArea className="flex-1">
             <div className="px-6 pb-6 space-y-6">
               
@@ -292,68 +292,67 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
 
                 <FormMessage>{form.formState.errors.lines?.message}</FormMessage>
                 
-                <Button type="button" variant="outline" size="sm" onClick={() => append({ productName: "", qty: 1, unitPrice: 0, vatTreatment: 'Standard' })}>
-                  Add Line
-                </Button>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => append({ productName: "", qty: 1, unitPrice: 0, vatTreatment: 'Standard' })}>
+                Add Line
+              </Button>
 
-                <div className="space-y-4 rounded-md border p-4">
-                  <div>
-                    <Label>Product Name</Label>
+              <div className="space-y-4 rounded-md border p-4">
+                <div>
+                  <FormLabel>Product Name</FormLabel>
+                  <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
+                    Platform Fee
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="space-y-2">
+                    <FormLabel>Qty</FormLabel>
+                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                      1
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <FormLabel>Unit Price</FormLabel>
+                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                      {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <FormLabel>VAT</FormLabel>
                     <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
-                      Platform Fee
+                      Standard
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    <div className="space-y-2">
-                      <Label>Qty</Label>
-                      <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
-                        1
-                      </div>
+                  <div className="space-y-2">
+                    <FormLabel>Net</FormLabel>
+                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                      {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div className="space-y-2">
-                      <Label>Unit Price</Label>
-                      <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
-                        {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>VAT</Label>
-                      <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
-                        Standard
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Net</Label>
-                      <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
-                        {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Gross</Label>
-                      <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm font-medium">
-                        {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
+                  </div>
+                  <div className="space-y-2">
+                    <FormLabel>Gross</FormLabel>
+                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm font-medium">
+                      {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                   </div>
                 </div>
-                
-                <div className="flex flex-col items-end space-y-2 pt-4">
-                  <div className="w-full max-w-xs flex justify-between text-sm">
-                      <span className="text-muted-foreground">Total Net</span>
-                      <span>{finalExVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="w-full max-w-xs flex justify-between text-sm">
-                      <span className="text-muted-foreground">Total VAT</span>
-                      <span>{finalVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  <Separator className="max-w-xs" />
-                  <div className="w-full max-w-xs flex justify-between text-lg font-bold">
-                      <span>Total Gross</span>
-                      <span>{finalIncVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
+              </div>
+              
+              <div className="flex flex-col items-end space-y-2 pt-4">
+                <div className="w-full max-w-xs flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total Net</span>
+                    <span>{finalExVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-
+                <div className="w-full max-w-xs flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total VAT</span>
+                    <span>{finalVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <Separator className="max-w-xs" />
+                <div className="w-full max-w-xs flex justify-between text-lg font-bold">
+                    <span>Total Gross</span>
+                    <span>{finalIncVatTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
               </div>
 
               <Separator />
@@ -480,10 +479,9 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
                   </FormItem>
                 )}
               />
-
             </div>
           </ScrollArea>
-          <SheetFooter className="p-6 bg-background border-t w-full">
+          <SheetFooter className="p-6 bg-background border-t w-full flex-shrink-0">
             <div className="flex justify-end w-full">
                 <Button type="submit" disabled={isLoading} size="lg">
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -493,6 +491,8 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
           </SheetFooter>
         </form>
       </Form>
-    </>
+    </div>
   );
 }
+
+    
