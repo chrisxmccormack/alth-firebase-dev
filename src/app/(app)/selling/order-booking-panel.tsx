@@ -88,17 +88,37 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
   const watchedLines = useWatch({ control: form.control, name: "lines" });
   const paymentMethod = useWatch({ control: form.control, name: "paymentMethod" });
   const watchedBuyerId = useWatch({ control: form.control, name: "buyerCompanyId" });
+  const tradeFinanceOption = useWatch({ control: form.control, name: "tradeFinanceOption" });
 
   const selectedBuyer = useMemo(() => {
     return buyers.find(b => b.id === watchedBuyerId);
   }, [buyers, watchedBuyerId]);
 
   const productTotals = calculateTotals(watchedLines.filter(l => l.productName).map(l => ({...l, amountExVat: 0, amountIncVat: 0})));
-  const platformFeePct = getPlatformFeePct(paymentMethod as any);
   
-  const platformFeeExVat = productTotals.exVat * (platformFeePct / 100);
-  const platformFeeVat = platformFeeExVat * 0.20; // Standard 20% VAT on fee
-  const platformFeeIncVat = platformFeeExVat + platformFeeVat;
+  const { platformFeeExVat, platformFeeVat, platformFeeIncVat } = useMemo(() => {
+    const baseFeePct = getPlatformFeePct(paymentMethod as any);
+    let calculatedFeeExVat = productTotals.exVat * (baseFeePct / 100);
+
+    if (tradeFinanceOption === '14Days') {
+      const rate = selectedBuyer?.rate14day;
+      if (rate && rate > 0 && rate < 100) {
+        const rateDecimal = rate / 100;
+        calculatedFeeExVat = calculatedFeeExVat / (1 - rateDecimal);
+      }
+    }
+    // Note: Future logic for 30/60 days will go here.
+
+    const feeVat = calculatedFeeExVat * 0.20; // Standard 20% VAT on fee
+    const feeIncVat = calculatedFeeExVat + feeVat;
+    
+    return {
+        platformFeeExVat: calculatedFeeExVat,
+        platformFeeVat: feeVat,
+        platformFeeIncVat: feeIncVat,
+    };
+  }, [productTotals.exVat, paymentMethod, tradeFinanceOption, selectedBuyer]);
+
 
   const finalExVatTotal = productTotals.exVat + platformFeeExVat;
   const finalVatTotal = productTotals.vat + platformFeeVat;
@@ -298,45 +318,45 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
             </Button>
 
             <div className="space-y-4 rounded-md border p-4">
-              <div className="space-y-2">
-                <FormLabel>Product Name</FormLabel>
-                <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
-                  Platform Fee
+                <div className="space-y-2">
+                    <FormLabel>Product Name</FormLabel>
+                    <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
+                    Platform Fee
+                    </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div className="space-y-2">
-                  <FormLabel>Qty</FormLabel>
-                  <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
-                    1
-                  </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="space-y-2">
+                    <FormLabel>Qty</FormLabel>
+                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                        1
+                    </div>
+                    </div>
+                    <div className="space-y-2">
+                    <FormLabel>Unit Price</FormLabel>
+                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                        {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    </div>
+                    <div className="space-y-2">
+                    <FormLabel>VAT</FormLabel>
+                    <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
+                        Standard
+                    </div>
+                    </div>
+                    <div className="space-y-2">
+                    <FormLabel>Net</FormLabel>
+                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
+                        {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    </div>
+                    <div className="space-y-2">
+                    <FormLabel>Gross</FormLabel>
+                    <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm font-medium">
+                        {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    </div>
                 </div>
-                <div className="space-y-2">
-                  <FormLabel>Unit Price</FormLabel>
-                  <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
-                    {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <FormLabel>VAT</FormLabel>
-                  <div className="flex h-10 w-full items-center rounded-md border-input bg-muted px-3 py-2 text-sm">
-                    Standard
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <FormLabel>Net</FormLabel>
-                  <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm">
-                    {platformFeeExVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <FormLabel>Gross</FormLabel>
-                  <div className="flex h-10 w-full items-center justify-end rounded-md border-input bg-muted px-3 py-2 text-sm font-medium">
-                    {platformFeeIncVat.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                </div>
-              </div>
             </div>
             
             <div className="flex flex-col items-end space-y-2 pt-4">
