@@ -3,56 +3,81 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-  
-    // --- Helper Functions ---
-    
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
+
+    // --- HELPER FUNCTIONS ---
+
+    function getSystemAdminUid() {
+      // CRITICAL: Replace this with your actual Admin User's UID from Firebase Authentication
+      // You can find this in the Firebase Console under Authentication -> Users.
+      return 'YOUR_ADMIN_UID_HERE';
+    }
+
+    function isAdmin() {
+      return request.auth.uid == getSystemAdminUid();
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Get the user's data document from the 'users' collection for the currently authenticated user
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Get the company ID associated with the currently authenticated user
+    function getCompanyId() {
+      return getUserData().companyId;
     }
     
-    function isApprovedUser(userId) {
-      let userData = getUserData(userId);
-      // Safely access companyIsApproved, default to false if it doesn't exist
-      return userData.companyIsApproved == true;
+    // Check if the user's company is approved
+    function isCompanyApproved() {
+      // companyIsApproved is set by an admin.
+      return getUserData().companyIsApproved == true;
     }
-    
-    function isUserCompanyMember(userId, companyId) {
-       let userData = getUserData(userId);
-       return userData.companyId == companyId;
-    }
-    
-    // --- Users Collection ---
-    // Users can only read and update their own user document.
-    // New user documents are created via a server-side action (register page).
+
+    // --- COLLECTION RULES ---
+
+    // USERS
+    // Users can create their own user document on sign up.
+    // They can read and update their own document.
+    // Admins can read/write any user document.
     match /users/{userId} {
-      allow read, update: if request.auth.uid == userId;
-      allow create: if false; // Disallow client-side creation
+      allow read, update: if request.auth.uid == userId || isAdmin();
+      allow create: if request.auth.uid == userId;
     }
-    
-    // --- Companies Collection ---
-    // Anyone can create a company (as part of setup).
-    // Only approved users can read the list of companies.
-    // Updates can only be made by the system admin (for approval) or the company owner.
+
+    // COMPANIES
+    // Any authenticated user can read all company data (for the directory).
+    // A user can create a company document if their UID matches the ownerUid in the document.
+    // Only the owner or an admin can update a company.
     match /companies/{companyId} {
-      allow create: if request.auth != null;
-      allow read: if isApprovedUser(request.auth.uid);
-      allow update: if request.auth.uid == resource.data.ownerUid || 
-                       request.auth.uid == 'YOUR_ADMIN_UID_HERE';
+      allow read: if isAuthenticated();
+      allow create: if request.resource.data.ownerUid == request.auth.uid;
+      allow update: if resource.data.ownerUid == request.auth.uid || isAdmin();
+      // No one can delete companies for now.
+      allow delete: if false;
     }
-    
-    // --- Orders Collection ---
-    // Orders can only be read or listed by approved users.
-    // Detailed read/write access is controlled by checking membership.
+
+    // ORDERS
+    // Rules for creating, reading, and updating orders between companies.
     match /orders/{orderId} {
-       allow get: if isApprovedUser(request.auth.uid) && 
-                      isUserCompanyMember(request.auth.uid, resource.data.buyerCompanyId) ||
-                      isUserCompanyMember(request.auth.uid, resource.data.sellerCompanyId);
-                      
-       allow list: if isApprovedUser(request.auth.uid);
-       
-       allow create, update: if isApprovedUser(request.auth.uid) &&
-                                 isUserCompanyMember(request.auth.uid, request.resource.data.sellerCompanyId) ||
-                                 isUserCompanyMember(request.auth.uid, request.resource.data.buyerCompanyId);
+      // Allow read if the user's company is part of the order, or if they are an admin.
+      allow read: if isAuthenticated() && (getCompanyId() in resource.data.members || isAdmin());
+
+      // Allow create if the user is authenticated, their company is approved,
+      // and their company ID matches the sellerCompanyId in the new order.
+      allow create: if isAuthenticated() 
+                    && isCompanyApproved()
+                    && getCompanyId() == request.resource.data.sellerCompanyId
+                    && getCompanyId() in request.resource.data.members;
+
+      // Allow update if the user's company is part of the order, or if they are an admin.
+      // This allows both buyer and seller to perform status updates.
+      allow update: if isAuthenticated() && (getCompanyId() in resource.data.members || isAdmin());
+
+      // No one can delete orders for now.
+      allow delete: if false;
     }
   }
 }
