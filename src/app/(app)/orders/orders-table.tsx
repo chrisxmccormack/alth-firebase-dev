@@ -154,7 +154,12 @@ export function OrdersTable({ data, role }: OrdersTableProps) {
                   </TableCell>
                   <TableCell>{order.paymentMethod}</TableCell>
                   <TableCell>{order.currency}</TableCell>
-                  <TableCell>{order.totals.incVat.toFixed(2)}</TableCell>
+                  <TableCell>
+                    {order.totals.incVat.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                    })}
+                  </TableCell>
                   <TableCell>
                     <Badge className={`${statusColors[order.status] || 'bg-gray-200 text-gray-800'}`}>
                         {order.status}

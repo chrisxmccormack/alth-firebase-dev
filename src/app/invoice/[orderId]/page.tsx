@@ -76,7 +76,11 @@ export default async function InvoicePage({ params }: { params: { orderId: strin
     };
 
     const formatCurrency = (amount: number) => {
-        return `${currency} ${amount.toFixed(2)}`;
+        const formattedAmount = amount.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+        return `${currency} ${formattedAmount}`;
     }
 
     const formatDate = (timestamp: any) => {
@@ -159,7 +163,7 @@ export default async function InvoicePage({ params }: { params: { orderId: strin
                                     {lines.map((line, index) => (
                                         <TableRow key={index}>
                                             <TableCell className="font-medium">{line.productName}</TableCell>
-                                            <TableCell className="text-center">{line.qty}</TableCell>
+                                            <TableCell className="text-center">{line.qty.toLocaleString()}</TableCell>
                                             <TableCell className="text-right">{formatCurrency(line.unitPrice)}</TableCell>
                                             <TableCell className="text-right">{formatCurrency(line.amountExVat)}</TableCell>
                                         </TableRow>
