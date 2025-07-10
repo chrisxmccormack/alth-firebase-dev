@@ -86,6 +86,9 @@ export default async function InvoicePage({ params }: { params: { orderId: strin
         return 'N/A';
     }
 
+    const productSubtotalExVat = lines.reduce((acc, line) => acc + line.amountExVat, 0);
+    const platformFeeExVat = totals.exVat - productSubtotalExVat;
+
     return (
         <div className="min-h-screen bg-muted/40 p-4 sm:p-8 font-body">
             <div className="mx-auto max-w-4xl">
@@ -161,6 +164,14 @@ export default async function InvoicePage({ params }: { params: { orderId: strin
                                             <TableCell className="text-right">{formatCurrency(line.amountExVat)}</TableCell>
                                         </TableRow>
                                     ))}
+                                    {platformFeeExVat > 0 && (
+                                        <TableRow>
+                                            <TableCell className="font-medium">Platform Fee</TableCell>
+                                            <TableCell className="text-center">1</TableCell>
+                                            <TableCell className="text-right">{formatCurrency(platformFeeExVat)}</TableCell>
+                                            <TableCell className="text-right">{formatCurrency(platformFeeExVat)}</TableCell>
+                                        </TableRow>
+                                    )}
                                 </TableBody>
                             </Table>
                         </div>
