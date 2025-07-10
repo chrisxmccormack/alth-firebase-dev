@@ -15,7 +15,7 @@ import {
   documentId,
 } from "firebase/firestore";
 import { firestore } from "@/lib/firebase";
-import { calculateTotals, getPlatformFeePct } from "@/lib/orders";
+import { calculateAndAddLineTotals, calculateTotals, getPlatformFeePct } from "@/lib/orders";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,14 +94,18 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
     return buyers.find(b => b.id === watchedBuyerId);
   }, [buyers, watchedBuyerId]);
 
-  const productTotals = calculateTotals(watchedLines.filter(l => l.productName).map(l => ({...l, amountExVat: 0, amountIncVat: 0})));
+  const productTotals = useMemo(() => {
+    const validLines = watchedLines.filter(l => l.productName && l.qty > 0);
+    const processedLines = calculateAndAddLineTotals(validLines);
+    return calculateTotals(processedLines);
+  }, [watchedLines]);
   
   const { platformFeeExVat, platformFeeVat, platformFeeIncVat } = useMemo(() => {
     const baseFeePct = getPlatformFeePct(paymentMethod as any);
     const basePlatformFee = productTotals.exVat * (baseFeePct / 100);
 
     let tradeFinanceFee = 0;
-    if (tradeFinanceOption !== 'None') {
+    if (tradeFinanceOption !== 'None' && productTotals.exVat > 0) {
         let rate: number | undefined;
         if (tradeFinanceOption === '14Days') {
             rate = selectedBuyer?.rate14day;
@@ -111,16 +115,13 @@ export function OrderBookingPanel({ onOrderCreated }: OrderBookingPanelProps) {
             rate = selectedBuyer?.rate60day;
         }
 
-        // Also check product total is positive to avoid calculating a fee on nothing
-        if (rate && rate > 0 && rate < 100 && productTotals.exVat > 0) {
+        if (rate && rate > 0 && rate < 100) {
             const rateDecimal = rate / 100;
-            // The fee is the difference between the grossed-up amount and the original product amount
             tradeFinanceFee = (productTotals.exVat / (1 - rateDecimal)) - productTotals.exVat;
         }
     }
 
     const calculatedFeeExVat = basePlatformFee + tradeFinanceFee;
-
     const feeVat = calculatedFeeExVat * 0.20; // Standard 20% VAT on fee
     const feeIncVat = calculatedFeeExVat + feeVat;
     
