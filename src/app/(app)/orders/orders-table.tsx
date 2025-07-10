@@ -104,7 +104,7 @@ const ActionCell = ({ order, role }: { order: PopulatedOrder, role: "seller" | "
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                     <DropdownMenuItem asChild>
-                      <Link href={`/invoice/${order.id}`} target="_blank" rel="noopener noreferrer">Show</Link>
+                      <Link href={`/invoice/${order.id}`} target="_blank" rel="noopener noreferrer">View</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem>Send</DropdownMenuItem>
                     <DropdownMenuSeparator />
