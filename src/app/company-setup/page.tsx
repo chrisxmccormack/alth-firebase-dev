@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -97,6 +98,12 @@ export default function CompanySetupPage() {
         createdAt: serverTimestamp(),
         ownerUid: user.uid,
         ownerEmail: user.email,
+        // Initialize admin-managed fields to null
+        creditLimit: null,
+        creditUsage: null,
+        rate14day: null,
+        rate30day: null,
+        rate60day: null,
       });
 
       const userRef = doc(firestore!, "users", user.uid);
